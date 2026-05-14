@@ -16,11 +16,8 @@ inputs:
     description: 'GitHub Personal Access Token'
     required: true
   firebase_service_account_json:
-    description: 'The full JSON content of the Firebase Service Account key (Optional if B64 is provided)'
-    required: false
-  firebase_service_account_b64:
-    description: 'The Base64 encoded JSON content of the Firebase Service Account key (Recommended)'
-    required: false
+    description: 'The full JSON content of the Firebase Service Account key'
+    required: true
 
 runs:
   using: 'docker'
@@ -31,5 +28,4 @@ runs:
     GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
     GH_PAT: ${{ inputs.gh_pat }}
     FIREBASE_SERVICE_ACCOUNT_JSON: ${{ inputs.firebase_service_account_json }}
-    FIREBASE_SERVICE_ACCOUNT_B64: ${{ inputs.firebase_service_account_b64 }}
     FIREBASE_SERVICE_ACCOUNT_PATH: 'firebase-key.json'

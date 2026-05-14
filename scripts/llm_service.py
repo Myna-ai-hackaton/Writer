@@ -1,7 +1,7 @@
 import json
 import os
 from openai import OpenAI
-import google.generativeai as genai
+from google import genai
 from config import OPENAI_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY
 
 def get_llm_client():
@@ -20,12 +20,12 @@ def get_llm_client():
             base_url="https://openrouter.ai/api/v1",
             api_key=OPENROUTER_API_KEY,
         )
+        # Using a more standard ID for OpenRouter
         return client, "openrouter", "google/gemini-flash-1.5"
     
     if GEMINI_API_KEY:
         print("Using Google Gemini (Direct) as the LLM provider.")
-        genai.configure(api_key=GEMINI_API_KEY)
-        client = genai.GenerativeModel('gemini-1.5-flash')
+        client = genai.Client(api_key=GEMINI_API_KEY)
         return client, "gemini", "gemini-1.5-flash"
     
     raise ValueError("No AI API keys found. Please set OPENAI_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY.")
@@ -90,13 +90,15 @@ def summarize_pr(pr_metadata: dict, diff: str) -> dict:
             raw_json_string = completion.choices[0].message.content
         
         elif provider == "gemini":
-            # Gemini-specific call
+            # New google-genai SDK call
             full_prompt = f"{system_instruction}\n\n{prompt}"
-            response = client.generate_content(
-                full_prompt,
-                generation_config=genai.GenerationConfig(
-                    response_mime_type="application/json",
-                )
+            response = client.models.generate_content(
+                model=model,
+                contents=full_prompt,
+                config={
+                    'response_mime_type': 'application/json',
+                    'temperature': 0.2
+                }
             )
             raw_json_string = response.text
 
