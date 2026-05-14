@@ -4,7 +4,7 @@ from typing import Optional, Any
 from datetime import datetime
 from openai import OpenAI
 from google import genai
-from scripts.config import OPENAI_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY
+from config import OPENAI_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY
 
 ALPHA = 0.18  # The learning rate for rolling metrics (EWMA)
 
@@ -59,7 +59,7 @@ def summarize_pr(
     meta = full_context["metadata"]
 
     system_instruction = (
-        "You are a Technical Auditor and Engineering Mentor. "
+        "You are an Elite Engineering Mentor and a Technical Auditor. "
         "Extract raw engineering signals from the PR. DO NOT perform any math or averages. "
         "Return a valid JSON object."
     )
@@ -90,8 +90,9 @@ def summarize_pr(
 
     --- INSTRUCTIONS ---
     1. Extract Signals (1-10): complexity, documentation, resilience, quality.
-    2. Identify: primary_focus (Architecture|Feature|TechDebt|Bugfix|Security), skills_used[].
-    3. Generate Summary: Categorized release notes (business vs. technical impact).
+    2. Identify Archetype: architect (structure), plumber (logic), janitor (maintenance), bug_squasher (fixes).
+    3. Identify: skills_used[].
+    4. Generate Summary: Categorized release notes (business vs. technical impact).
 
     OUTPUT SCHEMA (Strict JSON):
     {{
@@ -100,7 +101,7 @@ def summarize_pr(
         "documentation": int,
         "resilience": int,
         "quality": int,
-        "primary_focus": "string",
+        "primary_archetype": "architect|plumber|janitor|bug_squasher",
         "skills_used": ["string"]
       }},
       "pr_summary": {{
@@ -122,7 +123,7 @@ def summarize_pr(
                     {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.1,
+                temperature=0.2,
             )
             raw_json_string = completion.choices[0].message.content or ""
 
@@ -130,7 +131,7 @@ def summarize_pr(
             response = client_any.models.generate_content(
                 model=model,
                 contents=f"{system_instruction}\n\n{prompt}",
-                config={"response_mime_type": "application/json", "temperature": 0.1},
+                config={"response_mime_type": "application/json", "temperature": 0.2},
             )
             raw_json_string = response.text
 
@@ -165,7 +166,7 @@ def evaluate_pr_and_update_profile(
                 "activity_counters": {"merged": 0, "denied": 0},
                 "rolling_metrics": {"complexity": 5.0, "docs": 5.0, "resilience": 5.0, "quality": 5.0},
                 "temporal_history": [],
-                "focus_distribution": {"Architecture": 0, "Feature": 0, "TechDebt": 0, "Bugfix": 0, "Security": 0},
+                "archetype_distribution": {"architect": 0, "plumber": 0, "janitor": 0, "bug_squasher": 0},
                 "skills_matrix": {}
             },
             "projects": {}
@@ -175,7 +176,7 @@ def evaluate_pr_and_update_profile(
         "activity_counters": {"merged": 0, "denied": 0},
         "rolling_metrics": {"complexity": 5.0, "docs": 5.0, "resilience": 5.0, "quality": 5.0},
         "temporal_history": [],
-        "focus_distribution": {"Architecture": 0, "Feature": 0, "TechDebt": 0, "Bugfix": 0, "Security": 0},
+        "archetype_distribution": {"architect": 0, "plumber": 0, "janitor": 0, "bug_squasher": 0},
         "skills_matrix": {}
     })
 
@@ -208,12 +209,9 @@ def evaluate_pr_and_update_profile(
         })
         p_state["temporal_history"] = p_state["temporal_history"][-20:]
 
-        focus = str(signals.get("primary_focus", "Feature"))
-        if focus in p_state["focus_distribution"]:
-            p_state["focus_distribution"][focus] += 1
-        else:
-            p_state["focus_distribution"].setdefault("Feature", 0)
-            p_state["focus_distribution"]["Feature"] += 1
+        archetype = str(signals.get("primary_archetype", "plumber"))
+        if archetype in p_state["archetype_distribution"]:
+            p_state["archetype_distribution"][archetype] += 1
         
         for skill in signals.get("skills_used", []):
             if skill not in p_state["skills_matrix"]:
@@ -225,7 +223,7 @@ def evaluate_pr_and_update_profile(
             elif xp > 5: p_state["skills_matrix"][skill]["level"] = "Mid"
 
         if project_name not in profile["projects"]:
-            profile["projects"][project_name] = {"prs_analyzed": 0, "primary_focus": focus}
+            profile["projects"][project_name] = {"prs_analyzed": 0, "primary_archetype": archetype}
         
         profile["projects"][project_name]["prs_analyzed"] += 1
         profile["projects"][project_name]["last_contribution"] = datetime.now().strftime("%Y-%m-%d")

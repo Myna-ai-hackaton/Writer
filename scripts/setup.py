@@ -102,7 +102,7 @@ def setup():
 
     # LLM Provider Choice
     print("\nSelect your AI Provider:")
-    print("1. OpenRouter (Supports Gemini 2.0 Flash)")
+    print("1. OpenRouter (Supports Gemini 2.5 Flash)")
     print("2. Google Gemini (Direct API)")
     print("3. OpenAI (ChatGPT)")
     provider_choice = input("Choice (1-3): ").strip()
@@ -171,6 +171,7 @@ on:
 
 jobs:
   summarize:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - name: Run Writer Agent
@@ -194,7 +195,7 @@ jobs:
         "1. Commit the new workflow file: 'git add .github/workflows/writer.yml && git commit -m \"Add Writer Agent\"'"
     )
     print("2. Push to GitHub.")
-    print("The Writer Agent will now analyze every closed PR in this repo!")
+    print("The Writer Agent will now analyze every merged PR in this repo!")
 
 
 if __name__ == "__main__":
