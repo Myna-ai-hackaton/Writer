@@ -71,7 +71,14 @@ def summarize_pr(pr_metadata: dict, diff: str, existing_profile: dict = None, fe
     Title: {pr_metadata.get('title', 'No Title')}
     Author: {pr_metadata.get('author', 'Unknown')}
     Repo: {pr_metadata.get('repo', 'Unknown')}
-    Description: {pr_metadata.get('body', 'No Description')}        
+    Description: {pr_metadata.get('body', 'No Description')}
+    
+    --- HARD ENGINEERING STATS ---
+    Lines Added: {pr_metadata.get('stats', {}).get('additions')}
+    Lines Deleted: {pr_metadata.get('stats', {}).get('deletions')}
+    Files Changed: {pr_metadata.get('stats', {}).get('changed_files')}
+    Test Coverage Impact: {json.dumps(pr_metadata.get('test_stats'))}
+    PR Lifetime: Created at {pr_metadata.get('stats', {}).get('created_at')} -> Merged at {pr_metadata.get('stats', {}).get('merged_at')}
 
     --- CODE DIFF ---
     {diff}
@@ -81,14 +88,18 @@ def summarize_pr(pr_metadata: dict, diff: str, existing_profile: dict = None, fe
 
     --- INSTRUCTIONS ---
     1. Generate PR Summary: Categorize changes (Feature, Bugfix, etc.) and explain business vs. technical impact.
-    2. Quantify Competency Growth: Based on the diff and process feedback, evolve the developer's profile.
-       - Complexity Score: 1-10 (Technical depth of the solution).
-       - Documentation Score: 1-10 (Clarity of PR description and code intent).
-       - Review Resilience: 1-10 (Ability to incorporate feedback and iterate effectively).
-       - Initial Quality: 1-10 (Clarity and correctness of the first submission vs. subsequent revisions).
-       - Proficiency (Skills): Identify tech used and award 'Competency Points' (10-50).
-       - Archetypes: 'architect' (structure), 'plumber' (logic), 'janitor' (maintenance), 'bug_squasher' (fixes).
-       - Performance Summary: Update the specific project narrative.
+    2. Quantify Competency Growth: Based on the diff, process feedback, and hard stats, evolve the developer's profile.
+       - Complexity Score: 1-10.
+       - Documentation Score: 1-10.
+       - Review Resilience: 1-10.
+       - Initial Quality: 1-10 (Heavily penalize if Test-to-Code ratio is 0% for logical changes).
+       - Proficiency (Skills): Identify tech used and award 'Competency Points'.
+       - Archetypes: 
+         - 'architect': Weighted towards high deletions (refactoring) and pattern changes.
+         - 'plumber': Weighted towards high additions in core logic files.
+         - 'janitor': Weighted towards cleanup, docs, and test ratio.
+         - 'bug_squasher': Focused on remediating defects.
+       - Performance Summary: Update the specific project narrative. Use the 'Hard Engineering Stats' to justify your assessment (e.g., "Refined core logic while removing 200 lines of dead code").
 
     You MUST return a STRICT, valid JSON object matching this exact schema:
     {{

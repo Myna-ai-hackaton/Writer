@@ -20,15 +20,52 @@ IGNORE_PATTERNS = [
 ]
 
 def get_pr_details(repo_full_name: str, pr_number: int):
-    """Fetches the PR title and description."""
+    """Fetches the PR title, description, and rich engineering stats."""
     url = f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}"
     response = requests.get(url, headers=HEADERS)
     response.raise_for_status()
     data = response.json()
+    
+    # Calculate time to merge
+    created_at = data.get("created_at")
+    merged_at = data.get("merged_at")
+    
     return {
         "title": data.get("title", "No Title"),
         "body": data.get("body", "No Description"),
-        "author": data.get("user", {}).get("login", "Unknown")      
+        "author": data.get("user", {}).get("login", "Unknown"),
+        "stats": {
+            "additions": data.get("additions", 0),
+            "deletions": data.get("deletions", 0),
+            "changed_files": data.get("changed_files", 0),
+            "created_at": created_at,
+            "merged_at": merged_at
+        }
+    }
+
+def get_test_ratio(repo_full_name: str, pr_number: int):
+    """Calculates what percentage of the PR is testing code."""
+    url = f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}/files"
+    response = requests.get(url, headers=HEADERS)
+    files = response.json()
+    
+    test_files = 0
+    logic_files = 0
+    
+    test_patterns = [r'.*test.*', r'.*spec.*', r'.*mock.*']
+    
+    for f in files:
+        filename = f.get("filename", "").lower()
+        if any(re.match(p, filename) for p in test_patterns):
+            test_files += 1
+        else:
+            logic_files += 1
+            
+    total = test_files + logic_files
+    return {
+        "test_file_count": test_files,
+        "logic_file_count": logic_files,
+        "test_ratio_percent": round((test_files / total * 100), 2) if total > 0 else 0
     }
 
 def get_pr_diff(repo_full_name: str, pr_number: int):

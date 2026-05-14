@@ -57,10 +57,14 @@ def run():
 
     # --- 5. CORE PIPELINE: Fetch -> Summarize -> Save ---
     try:
-        print(f"1/4: Fetching PR data, feedback, and existing profile for @{author_handle}...")
+        print(f"1/4: Fetching PR data, feedback, and engineering stats for @{author_handle}...")
         pr_meta = get_pr_details(repo_name, pr_number)
-        pr_meta["repo"] = repo_name # Ensure repo name is in metadata
+        pr_meta["repo"] = repo_name 
         pr_diff = get_pr_diff(repo_name, pr_number)
+        
+        # New: Fetch Test-to-Code ratio
+        test_stats = get_test_ratio(repo_name, pr_number)
+        pr_meta["test_stats"] = test_stats
         
         # Fetch PR iteration metadata (commits, comments, etc)
         pr_feedback = get_pr_feedback(repo_name, pr_number)
@@ -68,7 +72,7 @@ def run():
         # Fetch the existing developer profile (Project-specific)
         existing_profile = get_developer_profile(project_name, author_handle)
 
-        print("2/4: Summarizing PR and evolving developer profile (with process context)...")
+        print("2/4: Summarizing PR and evolving developer profile (with deep analytics)...")
         ai_response = summarize_pr(pr_meta, pr_diff, existing_profile, pr_feedback)
 
         if "error" in ai_response:
