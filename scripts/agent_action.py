@@ -3,7 +3,7 @@ import json
 import sys
 from github_service import get_pr_details, get_pr_diff
 from llm_service import summarize_pr
-from storage_service import save_summary, summary_exists
+from storage_service import save_summary, summary_exists, get_developer_profile, update_developer_profile
 
 def run():
     # --- 1. FIREBASE SETUP: Create key file from GitHub Secret ---
@@ -41,7 +41,10 @@ def run():
 
     pr_number = payload["pull_request"]["number"]
     repo_name = payload["repository"]["full_name"]
-    print(f"Analyzing Merged PR #{pr_number} in {repo_name}...")
+    project_name = repo_name.split('/')[-1]
+    author_handle = payload["pull_request"]["user"]["login"]
+    
+    print(f"Analyzing Merged PR #{pr_number} in {repo_name} (@{project_name}) by @{author_handle}...")
 
     # --- 4. IDEMPOTENCY: Avoid duplicate AI calls ---
     try:
@@ -54,19 +57,32 @@ def run():
 
     # --- 5. CORE PIPELINE: Fetch -> Summarize -> Save ---
     try:
-        print("1/3: Fetching PR data and code changes...")
+        print(f"1/4: Fetching PR data, feedback, and existing profile for @{author_handle}...")
         pr_meta = get_pr_details(repo_name, pr_number)
+        pr_meta["repo"] = repo_name # Ensure repo name is in metadata
         pr_diff = get_pr_diff(repo_name, pr_number)
+        
+        # Fetch PR iteration metadata (commits, comments, etc)
+        pr_feedback = get_pr_feedback(repo_name, pr_number)
+        
+        # Fetch the existing developer profile (Project-specific)
+        existing_profile = get_developer_profile(project_name, author_handle)
 
-        print("2/3: Summarizing with AI...")
-        ai_summary = summarize_pr(pr_meta, pr_diff)
+        print("2/4: Summarizing PR and evolving developer profile (with process context)...")
+        ai_response = summarize_pr(pr_meta, pr_diff, existing_profile, pr_feedback)
 
-        if "error" in ai_summary:
-            print(f"AI Failure: {ai_summary['error']}")
+        if "error" in ai_response:
+            print(f"AI Failure: {ai_response['error']}")
             sys.exit(1)
 
-        print("3/3: Syncing to Cloud Memory...")
-        save_summary(repo_name, pr_number, ai_summary)
+        pr_summary = ai_response.get("pr_summary", {})
+        updated_profile = ai_response.get("updated_profile", {})
+
+        print(f"3/4: Syncing PR Summary to {project_name}/prs...")
+        save_summary(repo_name, pr_number, pr_summary)
+
+        print(f"4/4: Saving evolved profile for @{author_handle} in {project_name}/developers...")
+        update_developer_profile(project_name, author_handle, updated_profile)
 
         print("Done! Agent finished successfully.")
 

@@ -45,6 +45,31 @@ def get_pr_diff(repo_full_name: str, pr_number: int):
     raw_diff = response.text
     return clean_raw_diff(raw_diff) # We pass the diff through our cleaner before returning it
 
+def get_pr_feedback(repo_full_name: str, pr_number: int):
+    """
+    Fetches metadata about the PR process:
+    - Number of review comments
+    - Number of commits (to see how many iterations were needed)
+    - If there were any change requests
+    """
+    # Fetch general PR info for commit count
+    pr_url = f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}"
+    pr_data = requests.get(pr_url, headers=HEADERS).json()
+    
+    # Fetch review comments
+    reviews_url = f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}/reviews"
+    reviews_data = requests.get(reviews_url, headers=HEADERS).json()
+    
+    change_requests = [r for r in reviews_data if r.get("state") == "CHANGES_REQUESTED"]
+    review_comments = [r.get("body") for r in reviews_data if r.get("body")]
+
+    return {
+        "commit_count": pr_data.get("commits", 0),
+        "review_comment_count": len(review_comments),
+        "had_change_requests": len(change_requests) > 0,
+        "review_summaries": review_comments[:5] # Send a few snippets to the AI
+    }
+
 def clean_raw_diff(raw_diff: str, max_length: int = 15000) -> str:  
     """
     Parses a raw git diff, removes noisy/massive files,
