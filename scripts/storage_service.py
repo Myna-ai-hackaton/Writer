@@ -40,7 +40,7 @@ def save_summary(repo_name: str, pr_number: int, summary_data: dict):
     project_name = repo_name.split("/")[-1]
 
     # New Hierarchical Path: myna_ai_info -> {Writer} -> prs -> {doc_id}
-    doc_id = f"pr_{pr_number}"
+    doc_id = f"{project_name}_pr_{pr_number}"
     doc_ref = (
         db.collection("myna_ai_info")
         .document(project_name)
@@ -86,7 +86,7 @@ def summary_exists(repo_name: str, pr_number: int) -> bool:
     db = get_db()
     project_name = repo_name.split("/")[-1]
 
-    doc_id = f"pr_{pr_number}"
+    doc_id = f"{project_name}_pr_{pr_number}"
     doc_ref = (
         db.collection("myna_ai_info")
         .document(project_name)
