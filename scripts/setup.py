@@ -29,38 +29,66 @@ def setup():
         print("❌ Error: This script must be run from the root of a Git repository.")
         sys.exit(1)
 
-    # 3. Collect API Keys
-    print("--- Configuration ---")
-    gh_pat = input("Enter your GitHub PAT (with repo scope): ").strip()
-    openrouter_key = input("Enter your OpenRouter API Key: ").strip()
+    # 3. Get existing secrets
+    print("🔍 Checking existing secrets...")
+    existing_secrets_raw = run_command(["gh", "secret", "list"])
+    existing_secrets = []
+    if existing_secrets_raw:
+        for line in existing_secrets_raw.splitlines():
+            if line.strip():
+                existing_secrets.append(line.split()[0])
+
+    # 4. Collect API Keys
+    secrets_to_set = {}
     
-    fb_key_path = input("Enter the path to your Firebase service account JSON file: ").strip()
-    if not os.path.exists(fb_key_path):
-        print(f"❌ Error: File not found at {fb_key_path}")
-        sys.exit(1)
+    print("\n--- Configuration ---")
 
-    with open(fb_key_path, 'r') as f:
-        fb_json = f.read()
+    # Helper to check and prompt
+    def prompt_for_secret(name, label, is_file=False):
+        if name in existing_secrets:
+            choice = input(f"🔹 Secret '{name}' already exists. Update it? (y/n): ").lower()
+            if choice != 'y':
+                return None
+        
+        val = input(f"Enter {label}: ").strip()
+        if not val:
+            return None
 
-    # 4. Set GitHub Secrets
-    print("\n🔐 Setting up GitHub Secrets...")
-    
-    secrets = {
-        "GH_PAT": gh_pat,
-        "OPENROUTER_API_KEY": openrouter_key,
-        "FIREBASE_SERVICE_ACCOUNT_JSON": fb_json
-    }
+        if is_file:
+            if not os.path.exists(val):
+                print(f"   ❌ Error: File not found at {val}")
+                return None
+            try:
+                with open(val, 'r') as f:
+                    return f.read()
+            except Exception as e:
+                print(f"   ❌ Error reading file: {e}")
+                return None
+        return val
 
-    for name, value in secrets.items():
-        print(f"   Setting {name}...")
-        # Use subprocess.Popen to feed the secret value via stdin to avoid it appearing in process lists
-        proc = subprocess.Popen(["gh", "secret", "set", name], stdin=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        _, err = proc.communicate(input=value)
-        if proc.returncode != 0:
-            print(f"   ❌ Failed to set {name}: {err}")
-            sys.exit(1)
+    gh_pat = prompt_for_secret("GH_PAT", "your GitHub PAT (with repo scope)")
+    if gh_pat: secrets_to_set["GH_PAT"] = gh_pat
 
-    # 5. Create Workflow File
+    openrouter_key = prompt_for_secret("OPENROUTER_API_KEY", "your OpenRouter API Key")
+    if openrouter_key: secrets_to_set["OPENROUTER_API_KEY"] = openrouter_key
+
+    fb_json = prompt_for_secret("FIREBASE_SERVICE_ACCOUNT_JSON", "the path to your Firebase JSON file", is_file=True)
+    if fb_json: secrets_to_set["FIREBASE_SERVICE_ACCOUNT_JSON"] = fb_json
+
+    # 5. Set GitHub Secrets
+    if secrets_to_set:
+        print("\n🔐 Setting up GitHub Secrets...")
+        for name, value in secrets_to_set.items():
+            print(f"   Setting {name}...")
+            proc = subprocess.Popen(["gh", "secret", "set", name], stdin=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            _, err = proc.communicate(input=value)
+            if proc.returncode != 0:
+                print(f"   ❌ Failed to set {name}: {err}")
+                sys.exit(1)
+    else:
+        print("\nℹ️ No secrets updated.")
+
+    # 6. Create Workflow File
     print("\n📄 Creating GitHub Workflow file...")
     workflow_dir = ".github/workflows"
     os.makedirs(workflow_dir, exist_ok=True)
