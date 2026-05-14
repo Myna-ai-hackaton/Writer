@@ -25,12 +25,12 @@ def get_llm_client():
             base_url="https://openrouter.ai/api/v1",
             api_key=OPENROUTER_API_KEY,
         )
-        return client, "openrouter", "google/gemini-2.0-flash"
+        return client, "openrouter", "google/gemini-2.5-flash"
 
     if GEMINI_API_KEY:
         print("Using Google Gemini (Direct) as the LLM provider.")
         client = genai.Client(api_key=GEMINI_API_KEY)
-        return client, "gemini", "gemini-2.0-flash"
+        return client, "gemini", "gemini-2.5-flash"
 
     raise ValueError(
         "No AI API keys found. Please set OPENAI_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY."
