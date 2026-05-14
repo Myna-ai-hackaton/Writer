@@ -60,7 +60,11 @@ def setup():
                 return None
             try:
                 with open(val, 'r') as f:
-                    return f.read()
+                    content = f.read()
+                    # Basic Firebase JSON Validation
+                    if "project_id" not in content or "private_key" not in content:
+                        print("   ⚠️ Warning: This doesn't look like a valid Firebase Service Account JSON.")
+                    return content
             except Exception as e:
                 print(f"   ❌ Error reading file: {e}")
                 return None
@@ -69,8 +73,22 @@ def setup():
     gh_pat = prompt_for_secret("GH_PAT", "your GitHub PAT (with repo scope)")
     if gh_pat: secrets_to_set["GH_PAT"] = gh_pat
 
-    openrouter_key = prompt_for_secret("OPENROUTER_API_KEY", "your OpenRouter API Key")
-    if openrouter_key: secrets_to_set["OPENROUTER_API_KEY"] = openrouter_key
+    # LLM Provider Choice
+    print("\nSelect your AI Provider:")
+    print("1. OpenRouter (Supports Gemini 2.5 Flash)")
+    print("2. Google Gemini (Direct API)")
+    print("3. OpenAI (ChatGPT)")
+    provider_choice = input("Choice (1-3): ").strip()
+
+    if provider_choice == "1":
+        key = prompt_for_secret("OPENROUTER_API_KEY", "your OpenRouter API Key")
+        if key: secrets_to_set["OPENROUTER_API_KEY"] = key
+    elif provider_choice == "2":
+        key = prompt_for_secret("GEMINI_API_KEY", "your Google Gemini API Key")
+        if key: secrets_to_set["GEMINI_API_KEY"] = key
+    elif provider_choice == "3":
+        key = prompt_for_secret("OPENAI_API_KEY", "your OpenAI API Key")
+        if key: secrets_to_set["OPENAI_API_KEY"] = key
 
     fb_json = prompt_for_secret("FIREBASE_SERVICE_ACCOUNT_JSON", "the path to your Firebase JSON file", is_file=True)
     if fb_json: secrets_to_set["FIREBASE_SERVICE_ACCOUNT_JSON"] = fb_json
@@ -89,13 +107,20 @@ def setup():
         print("\nℹ️ No secrets updated.")
 
     # 6. Create Workflow File
-    print("\n📄 Creating GitHub Workflow file...")
     workflow_dir = ".github/workflows"
-    os.makedirs(workflow_dir, exist_ok=True)
-    
     workflow_path = os.path.join(workflow_dir, "writer.yml")
     
-    workflow_content = """name: Writer Agent
+    should_create_workflow = True
+    if os.path.exists(workflow_path):
+        choice = input(f"\n🔹 Workflow file '{workflow_path}' already exists. Overwrite it? (y/n): ").lower()
+        if choice != 'y':
+            should_create_workflow = False
+
+    if should_create_workflow:
+        print("\n📄 Creating GitHub Workflow file...")
+        os.makedirs(workflow_dir, exist_ok=True)
+        
+        workflow_content = """name: Writer Agent
 
 on:
   pull_request:
@@ -112,13 +137,16 @@ jobs:
         with:
           gh_pat: ${{ secrets.GH_PAT }}
           openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           firebase_service_account_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 """
-    
-    with open(workflow_path, "w") as f:
-        f.write(workflow_content)
-
-    print(f"✅ Created {workflow_path}")
+        
+        with open(workflow_path, "w") as f:
+            f.write(workflow_content)
+        print(f"✅ Created {workflow_path}")
+    else:
+        print(f"\nℹ️ Skipped creating {workflow_path}")
 
     print("\n✨ Setup Complete!")
     print("1. Commit the new workflow file: 'git add .github/workflows/writer.yml && git commit -m \"Add Writer Agent\"'")
