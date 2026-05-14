@@ -222,10 +222,18 @@ def evaluate_pr_and_update_profile(
             if xp > 15: p_state["skills_matrix"][skill]["level"] = "Senior"
             elif xp > 5: p_state["skills_matrix"][skill]["level"] = "Mid"
 
-        if project_name not in profile["projects"]:
-            profile["projects"][project_name] = {"prs_analyzed": 0, "primary_archetype": archetype}
+        # 5. Project-Specific Summary (Qualitative)
+        project_stats = profile["projects"].setdefault(project_name, {
+            "prs_analyzed": 0, 
+            "primary_archetype": archetype
+        })
         
-        profile["projects"][project_name]["prs_analyzed"] += 1
-        profile["projects"][project_name]["last_contribution"] = datetime.now().strftime("%Y-%m-%d")
+        # Migrating old schema keys if they exist
+        if "prs_contributed" in project_stats and "prs_analyzed" not in project_stats:
+            project_stats["prs_analyzed"] = project_stats.pop("prs_contributed")
+
+        project_stats["prs_analyzed"] = project_stats.get("prs_analyzed", 0) + 1
+        project_stats["primary_archetype"] = archetype
+        project_stats["last_contribution"] = datetime.now().strftime("%Y-%m-%d")
 
     return profile
