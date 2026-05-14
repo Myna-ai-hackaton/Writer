@@ -4,23 +4,25 @@ An AI-powered Git Project Manager that summarizes Pull Requests and provides a q
 
 ## Project Structure
 
-- `scripts/main.py`: The FastAPI webhook listener.
-- `scripts/github_service.py`: Handles GitHub API calls.
-- `scripts/llm_service.py`: Processes PR data with Gemini AI.
-- `scripts/storage_service.py`: Manages the local JSON memory index.
-- `scripts/config.py`: Configuration and secrets management.
-- `scripts/requirements.txt`: Python dependencies.
-- `scripts/Dockerfile`: Docker configuration for the agent.
+- `scripts/`: Contains the core logic services.
+  - `main.py`: The FastAPI webhook listener.
+  - `github_service.py`: Handles GitHub API calls.
+  - `llm_service.py`: Processes PR data with Gemini AI.
+  - `storage_service.py`: Manages the local JSON memory index.
+  - `config.py`: Configuration and secrets management.
+- `requirements.txt`: Python dependencies.
+- `Dockerfile`: Docker configuration for the agent.
+- `.env`: Environment variables (API keys).
 
 ## Setup
 
 1.  **Clone the repository.**
 2.  **Install dependencies:**
     ```bash
-    pip install -r scripts/requirements.txt
+    pip install -r requirements.txt
     ```
 3.  **Configure Environment Variables:**
-    Copy `scripts/.env.example` to `scripts/.env` and fill in your keys:
+    Create a `.env` file in the root directory and fill in your keys:
     - `GITHUB_TOKEN`: A Personal Access Token with repo scope.
     - `GEMINI_API_KEY`: Your Google AI API key.
 4.  **Run the Agent:**
