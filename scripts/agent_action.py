@@ -1,14 +1,14 @@
 import os
 import json
 import sys
-from github_service import (
-    get_pr_details,
-    get_pr_diff,
-    get_test_ratio,
-    get_pr_feedback,
-)
-from llm_service import summarize_pr
-from storage_service import (
+
+# Dynamic path resolution to ensure the 'scripts' package is discoverable
+# This fixes "unknown import symbol" errors in both IDEs and different runtimes.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from scripts.github_service import fetch_full_pr_context
+from scripts.llm_service import summarize_pr, evaluate_pr_and_update_profile
+from scripts.storage_service import (
     save_summary,
     summary_exists,
     get_developer_profile,
@@ -42,21 +42,21 @@ def run():
     with open(event_path, "r") as f:
         payload = json.load(f)
 
-    # --- 3. VERIFICATION: Process only merged Pull Requests ---
+    # --- 3. VERIFICATION: Process only closed Pull Requests ---
     action = payload.get("action")
-    is_merged = payload.get("pull_request", {}).get("merged") is True
-
-    if action != "closed" or not is_merged:
-        print("Event is not a merged PR. Skipping.")
+    if action != "closed":
+        print(f"Action is '{action}', not 'closed'. Skipping.")
         sys.exit(0)
 
     pr_number = payload["pull_request"]["number"]
     repo_name = payload["repository"]["full_name"]
     project_name = repo_name.split("/")[-1]
     author_handle = payload["pull_request"]["user"]["login"]
+    is_merged = payload["pull_request"].get("merged", False)
 
+    status_label = "Merged" if is_merged else "Closed (Not Merged)"
     print(
-        f"Analyzing Merged PR #{pr_number} in {repo_name} (@{project_name}) by @{author_handle}..."
+        f"Analyzing {status_label} PR #{pr_number} in {repo_name} (@{project_name}) by @{author_handle}..."
     )
 
     # --- 4. IDEMPOTENCY: Avoid duplicate AI calls ---
@@ -68,43 +68,30 @@ def run():
         print(f"Error checking Firebase: {e}")
         sys.exit(1)
 
-    # --- 5. CORE PIPELINE: Fetch -> Summarize -> Save ---
+    # --- 5. CORE PIPELINE: Fetch -> Summarize -> Brain -> Save ---
     try:
-        print(
-            f"1/4: Fetching PR data, feedback, and engineering stats for @{author_handle}..."
-        )
-        pr_meta = get_pr_details(repo_name, pr_number)
-        pr_meta["repo"] = repo_name
-        pr_diff = get_pr_diff(repo_name, pr_number)
-
-        # New: Fetch Test-to-Code ratio
-        test_stats = get_test_ratio(repo_name, pr_number)
-        pr_meta["test_stats"] = test_stats
-
-        # Fetch PR iteration metadata (commits, comments, etc)
-        pr_feedback = get_pr_feedback(repo_name, pr_number)
+        print(f"1/4: Fetching consolidated context for PR #{pr_number}...")
+        full_context = fetch_full_pr_context(repo_name, pr_number)
+        full_context["pr_number"] = pr_number
 
         # Fetch the existing developer profile (Project-specific)
         existing_profile = get_developer_profile(project_name, author_handle)
 
-        print(
-            "2/4: Summarizing PR and evolving developer profile (with deep analytics)..."
-        )
-        ai_response = summarize_pr(pr_meta, pr_diff, existing_profile, pr_feedback)
+        print("2/4: Running 'Sensor' (LLM) to extract engineering signals...")
+        ai_response = summarize_pr(full_context, existing_profile)
 
         if "error" in ai_response:
             print(f"AI Failure: {ai_response['error']}")
+            save_summary(repo_name, pr_number, ai_response)
             sys.exit(1)
 
-        pr_summary = ai_response.get("pr_summary", {})
-        updated_profile = ai_response.get("updated_profile", {})
-
-        print(f"3/4: Syncing PR Summary to {project_name}/prs...")
-        save_summary(repo_name, pr_number, pr_summary)
-
-        print(
-            f"4/4: Saving evolved profile for @{author_handle} in {project_name}/developers..."
+        print("3/4: Running 'Brain' (Python) to evolve developer profile...")
+        updated_profile = evaluate_pr_and_update_profile(
+            ai_response, full_context, existing_profile
         )
+
+        print(f"4/4: Syncing PR Summary and Profile to {project_name}...")
+        save_summary(repo_name, pr_number, ai_response.get("pr_summary", {}))
         update_developer_profile(project_name, author_handle, updated_profile)
 
         print("Done! Agent finished successfully.")

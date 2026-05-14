@@ -1,7 +1,7 @@
 from typing import Dict, Union
 import requests
 import re
-from config import GH_PAT
+from scripts.config import GH_PAT
 
 HEADERS: Dict[str, Union[str, bytes]] = {
     "Authorization": f"Bearer {GH_PAT}",
@@ -21,104 +21,102 @@ IGNORE_PATTERNS = [
 ]
 
 
-def get_pr_details(repo_full_name: str, pr_number: int):
-    """Fetches the PR title, description, and rich engineering stats."""
-    url = f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}"
-    response = requests.get(url, headers=HEADERS)
-    response.raise_for_status()
-    data = response.json()
+def fetch_full_pr_context(repo_full_name: str, pr_number: int) -> dict:
+    """
+    Consolidated fetcher that gathers metadata, stats, test ratios, feedback, and diffs.
+    Handles pagination for files and reviews to ensure complete data.
+    """
+    base_url = f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}"
+    
+    # 1. Fetch Main PR Data
+    pr_res = requests.get(base_url, headers=HEADERS)
+    pr_res.raise_for_status()
+    data = pr_res.json()
 
-    # Calculate time to merge
-    created_at = data.get("created_at")
+    # Determine State: 'accepted_merged', 'denied_abandoned', or 'open'
     merged_at = data.get("merged_at")
+    raw_state = data.get("state")
+    
+    if merged_at:
+        final_status = "accepted_merged"
+    elif raw_state == "closed" and not merged_at:
+        final_status = "denied_abandoned"
+    else:
+        final_status = "open"
+
+    # 2. Fetch Feedback (Reviews and Comments) with Pagination
+    review_dialogue = []
+    page = 1
+    while True:
+        reviews_res = requests.get(f"{base_url}/reviews?page={page}&per_page=100", headers=HEADERS)
+        reviews_res.raise_for_status()
+        reviews = reviews_res.json()
+        if not reviews:
+            break
+        
+        for r in reviews:
+            # Ignore bot comments and empty bodies
+            user = r.get("user", {})
+            if r.get("body") and user.get("type") != "Bot":
+                review_dialogue.append({
+                    "user": user.get("login"),
+                    "body": r.get("body"),
+                    "state": r.get("state")
+                })
+        page += 1
+
+    # 3. Fetch Test Stats with Pagination
+    test_files = 0
+    total_files = 0
+    test_patterns = [r".*test.*", r".*spec.*", r".*mock.*"]
+    page = 1
+    while True:
+        files_res = requests.get(f"{base_url}/files?page={page}&per_page=100", headers=HEADERS)
+        files_res.raise_for_status()
+        files = files_res.json()
+        if not files:
+            break
+        
+        total_files += len(files)
+        for f in files:
+            filename = f.get("filename", "").lower()
+            if any(re.match(p, filename) for p in test_patterns):
+                test_files += 1
+        page += 1
+
+    # 4. Fetch Diff
+    diff_headers = HEADERS.copy()
+    diff_headers["Accept"] = "application/vnd.github.v3.diff"
+    diff_res = requests.get(f"{base_url}.diff?w=1", headers=diff_headers)
+    diff_res.raise_for_status()
 
     return {
-        "title": data.get("title", "No Title"),
-        "body": data.get("body", "No Description"),
-        "author": data.get("user", {}).get("login", "Unknown"),
+        "metadata": {
+            "title": data.get("title"),
+            "author": data.get("user", {}).get("login"),
+            "repo": repo_full_name,
+            "status": final_status,
+            "is_draft": data.get("draft", False),
+            "body": data.get("body", "")
+        },
         "stats": {
             "additions": data.get("additions", 0),
             "deletions": data.get("deletions", 0),
             "changed_files": data.get("changed_files", 0),
-            "created_at": created_at,
-            "merged_at": merged_at,
+            "commits": data.get("commits", 0),
+            "created_at": data.get("created_at"),
+            "merged_at": merged_at
         },
-    }
-
-
-def get_test_ratio(repo_full_name: str, pr_number: int):
-    """Calculates what percentage of the PR is testing code."""
-    url = f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}/files"
-    response = requests.get(url, headers=HEADERS)
-    response.raise_for_status()
-    files = response.json()
-
-    test_files = 0
-    logic_files = 0
-
-    test_patterns = [r".*test.*", r".*spec.*", r".*mock.*"]
-
-    for f in files:
-        filename = f.get("filename", "").lower()
-        if any(re.match(p, filename) for p in test_patterns):
-            test_files += 1
-        else:
-            logic_files += 1
-
-    total = test_files + logic_files
-    return {
-        "test_file_count": test_files,
-        "logic_file_count": logic_files,
-        "test_ratio_percent": round((test_files / total * 100), 2) if total > 0 else 0,
-    }
-
-
-def get_pr_diff(repo_full_name: str, pr_number: int):
-    """Fetches the raw code changes, ignoring pure whitespace changes."""
-    # Added ?w=1 so GitHub ignores lines where only whitespace/indentation changed!
-    url = f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}.diff?w=1"
-
-    diff_headers = HEADERS.copy()
-    diff_headers["Accept"] = "application/vnd.github.v3.diff"
-
-    response = requests.get(url, headers=diff_headers)
-    response.raise_for_status()
-
-    raw_diff = response.text
-    return clean_raw_diff(
-        raw_diff
-    )  # We pass the diff through our cleaner before returning it
-
-
-def get_pr_feedback(repo_full_name: str, pr_number: int):
-    """
-    Fetches metadata about the PR process:
-    - Number of review comments
-    - Number of commits (to see how many iterations were needed)
-    - If there were any change requests
-    """
-    # Fetch general PR info for commit count
-    pr_url = f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}"
-    response = requests.get(pr_url, headers=HEADERS)
-    response.raise_for_status()
-    pr_data = response.json()
-
-    # Fetch review comments
-    reviews_url = (
-        f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}/reviews"
-    )
-    response = requests.get(reviews_url, headers=HEADERS)
-    response.raise_for_status()
-    reviews_data = response.json()
-
-    change_requests = [r for r in reviews_data if r.get("state") == "CHANGES_REQUESTED"]
-    review_comments = [r.get("body") for r in reviews_data if r.get("body")]
-
-    return {
-        "commit_count": pr_data.get("commits", 0),
-        "review_comment_count": len(review_comments),
-        "had_change_requests": len(change_requests) > 0,
-        "review_summaries": review_comments[:5],  # Send a few snippets to the AI
+        "test_stats": {
+            "test_file_count": test_files,
+            "total_files": total_files,
+            "test_ratio_percent": round((test_files / total_files * 100), 2) if total_files > 0 else 0
+        },
+        "feedback_loop": {
+            "dialogue": review_dialogue[-10:], # Last 10 human comments for context
+            "comment_count": data.get("review_comments", 0)
+        },
+        "diff": clean_raw_diff(diff_res.text)
     }
 
 
