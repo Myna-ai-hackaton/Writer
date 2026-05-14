@@ -1,4 +1,7 @@
+fastapi
+uvicorn
 requests
 openai
+google-generativeai
 python-dotenv
 firebase-admin
