@@ -28,6 +28,10 @@ def run():
             print("Please add your Firebase Service Account JSON to GitHub Secrets.")
             sys.exit(1)
 
+    if not os.getenv("GH_PAT"):
+        print("CRITICAL ERROR: GH_PAT is missing.")
+        sys.exit(1)
+
     # --- 2. GITHUB PAYLOAD: Identify the triggering event ---
     event_path = os.getenv("GITHUB_EVENT_PATH")
     if not event_path or not os.path.exists(event_path):
@@ -69,8 +73,8 @@ def run():
         full_context = fetch_full_pr_context(repo_name, pr_number)
         full_context["pr_number"] = pr_number
 
-        # Fetch the existing developer profile (Project-specific)
-        existing_profile = get_developer_profile(project_name, author_handle)
+        # Fetch the existing developer profile (repo-specific)
+        existing_profile = get_developer_profile(repo_name, author_handle)
 
         print("2/4: Running 'Sensor' (LLM) to extract engineering signals...")
         ai_response = summarize_pr(full_context, existing_profile)
@@ -91,7 +95,7 @@ def run():
         pr_summary["author"] = author_handle
         
         save_summary(repo_name, pr_number, pr_summary)
-        update_developer_profile(project_name, author_handle, updated_profile)
+        update_developer_profile(repo_name, author_handle, updated_profile)
 
         print("Done! Agent finished successfully.")
 

@@ -4,9 +4,12 @@ import re
 from config import GH_PAT
 
 HEADERS: Dict[str, Union[str, bytes]] = {
-    "Authorization": f"Bearer {GH_PAT}",
     "Accept": "application/vnd.github.v3+json",
+    "User-Agent": "myna-writer",
 }
+
+if GH_PAT:
+    HEADERS["Authorization"] = f"Bearer {GH_PAT}"
 
 
 # --- List of noisy/junk files we do NOT want to send to the LLM ---
@@ -30,7 +33,7 @@ def fetch_full_pr_context(repo_full_name: str, pr_number: int) -> dict:
     base_url = f"https://api.github.com/repos/{repo_full_name}/pulls/{pr_number}"
     
     # 1. Fetch Main PR Data
-    pr_res = requests.get(base_url, headers=HEADERS)
+    pr_res = requests.get(base_url, headers=HEADERS, timeout=30)
     pr_res.raise_for_status()
     data = pr_res.json()
 
@@ -49,7 +52,11 @@ def fetch_full_pr_context(repo_full_name: str, pr_number: int) -> dict:
     review_dialogue = []
     page = 1
     while True:
-        reviews_res = requests.get(f"{base_url}/reviews?page={page}&per_page=100", headers=HEADERS)
+        reviews_res = requests.get(
+            f"{base_url}/reviews?page={page}&per_page=100",
+            headers=HEADERS,
+            timeout=30,
+        )
         reviews_res.raise_for_status()
         reviews = reviews_res.json()
         if not reviews:
@@ -72,7 +79,11 @@ def fetch_full_pr_context(repo_full_name: str, pr_number: int) -> dict:
     test_patterns = [r".*test.*", r".*spec.*", r".*mock.*"]
     page = 1
     while True:
-        files_res = requests.get(f"{base_url}/files?page={page}&per_page=100", headers=HEADERS)
+        files_res = requests.get(
+            f"{base_url}/files?page={page}&per_page=100",
+            headers=HEADERS,
+            timeout=30,
+        )
         files_res.raise_for_status()
         files = files_res.json()
         if not files:
@@ -88,7 +99,7 @@ def fetch_full_pr_context(repo_full_name: str, pr_number: int) -> dict:
     # 4. Fetch Diff
     diff_headers = HEADERS.copy()
     diff_headers["Accept"] = "application/vnd.github.v3.diff"
-    diff_res = requests.get(f"{base_url}.diff?w=1", headers=diff_headers)
+    diff_res = requests.get(base_url, headers=diff_headers, timeout=30)
     diff_res.raise_for_status()
 
     return {
