@@ -24,7 +24,7 @@ An AI-powered Git Project Manager that summarizes Pull Requests and provides a q
     ```
 3.  **Configure Environment Variables:**
     Create a `.env` file in the root directory and fill in your keys:
-    - `GITHUB_TOKEN`: A Personal Access Token with repo scope.
+    - `GH_PAT`: A Personal Access Token with repo scope.
     - `OPENROUTER_API_KEY`: Your OpenRouter API key.
     - `FIREBASE_SERVICE_ACCOUNT_PATH`: Path to your firebase-key.json.
 

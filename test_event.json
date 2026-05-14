@@ -1,0 +1,10 @@
+{
+  "action": "closed",
+  "pull_request": {
+    "number": 2,
+    "merged": true
+  },
+  "repository": {
+    "full_name": "Myna-ai-hackaton/Writer"
+  }
+}

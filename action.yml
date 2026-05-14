@@ -6,7 +6,7 @@ inputs:
   openrouter_api_key:
     description: 'OpenRouter API Key'
     required: true
-  github_token:
+  gh_pat:
     description: 'GitHub Personal Access Token'
     required: true
   firebase_service_account_json:
@@ -18,6 +18,6 @@ runs:
   image: 'Dockerfile'
   env:
     OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
-    GITHUB_TOKEN: ${{ inputs.github_token }}
+    GH_PAT: ${{ inputs.gh_pat }}
     FIREBASE_SERVICE_ACCOUNT_JSON: ${{ inputs.firebase_service_account_json }}
     FIREBASE_SERVICE_ACCOUNT_PATH: 'firebase-key.json'

@@ -1,8 +1,8 @@
 import requests
-from config import GITHUB_TOKEN
+from config import GH_PAT
 
 HEADERS = {
-    "Authorization": f"Bearer {GITHUB_TOKEN}",
+    "Authorization": f"Bearer {GH_PAT}",
     "Accept": "application/vnd.github.v3+json"
 }
 
