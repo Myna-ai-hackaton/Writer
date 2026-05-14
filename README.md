@@ -2,39 +2,60 @@
 
 An AI-powered Git Project Manager that summarizes Pull Requests and provides a queryable memory for project history.
 
-## Project Structure
+## How to use in any repository (Reusable Action)
 
-- `scripts/`: Contains the core logic services.
-  - `agent_action.py`: The entry point for the GitHub Action.
-  - `github_service.py`: Handles GitHub API calls.
-  - `llm_service.py`: Processes PR data with OpenRouter AI.
-  - `storage_service.py`: Manages the Firebase cloud memory.
-  - `config.py`: Configuration and secrets management.
-- `requirements.txt`: Python dependencies.
-- `Dockerfile`: Docker configuration for the agent.
-- `action.yml`: GitHub Action metadata.
-- `.env`: Environment variables (API keys).
+You don't need to copy any code to use this in a new repo. Simply create a workflow file and set up your secrets.
 
-## Setup
+### 1. Create Workflow File
+In your target repository, create `.github/workflows/writer.yml`:
 
-1.  **Clone the repository.**
-2.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-3.  **Configure Environment Variables:**
-    Create a `.env` file in the root directory and fill in your keys:
-    - `GH_PAT`: A Personal Access Token with repo scope.
-    - `OPENROUTER_API_KEY`: Your OpenRouter API key.
-    - `FIREBASE_SERVICE_ACCOUNT_PATH`: Path to your firebase-key.json.
+```yaml
+name: Writer Agent
 
-4.  **Wait for PRs:**
-    The agent will now run automatically on every merged Pull Request via GitHub Actions.
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  summarize:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Writer Agent
+        uses: Myna-ai-hackaton/Writer@main
+        with:
+          gh_pat: ${{ secrets.GH_PAT }}
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          firebase_service_account_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+```
+
+### 2. Configure GitHub Secrets
+Add these secrets to your repository (**Settings > Secrets and variables > Actions**):
+
+- `GH_PAT`: A Personal Access Token with `repo` scope.
+- `OPENROUTER_API_KEY`: Your OpenRouter API key.
+- `FIREBASE_SERVICE_ACCOUNT_JSON`: The full JSON content of your Firebase Service Account key.
+
+---
+
+## Local Development & Structure
+
+- `scripts/`: Core logic services.
+  - `agent_action.py`: Entry point for the Action.
+  - `llm_service.py`: PR summarization (uses Gemini 2.5 Flash).
+  - `github_service.py`: GitHub API integration.
+  - `storage_service.py`: Firebase Firestore management.
+- `action.yml`: Metadata defining the GitHub Action.
+- `Dockerfile`: Containerizes the environment for the Action.
+
+### Local Setup
+1.  **Install dependencies:** `pip install -r requirements.txt`
+2.  **Env Config:** Create a `.env` with `GH_PAT`, `OPENROUTER_API_KEY`, etc.
+3.  **Run:** `python scripts/agent_action.py` (requires `GITHUB_EVENT_PATH` set to a mock event JSON).
 
 ## How it works
-
-1.  A Pull Request is merged into the `main` branch.
-2.  The GitHub Action triggers and runs the `Writer` agent.
-3.  The agent fetches the PR metadata and code diff.
-4.  OpenRouter AI summarizes the changes into a business-readable format.
-5.  The summary is saved to **Firebase Firestore** in real-time.
+1.  **Trigger:** A PR is merged into `main`.
+2.  **Fetch:** The agent pulls the PR description and code diff.
+3.  **Analyze:** Gemini 2.5 Flash generates a structured JSON summary (Features, Bugfixes, Risks).
+4.  **Store:** The summary is saved to **Firebase Firestore**, creating a permanent, searchable record of your project's evolution.
