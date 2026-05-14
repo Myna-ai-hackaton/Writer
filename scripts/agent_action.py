@@ -1,14 +1,9 @@
 import os
 import json
 import sys
-
-# Dynamic path resolution to ensure the 'scripts' package is discoverable
-# This fixes "unknown import symbol" errors in both IDEs and different runtimes.
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from scripts.github_service import fetch_full_pr_context
-from scripts.llm_service import summarize_pr, evaluate_pr_and_update_profile
-from scripts.storage_service import (
+from github_service import fetch_full_pr_context
+from llm_service import summarize_pr, evaluate_pr_and_update_profile
+from storage_service import (
     save_summary,
     summary_exists,
     get_developer_profile,
@@ -91,7 +86,11 @@ def run():
         )
 
         print(f"4/4: Syncing PR Summary and Profile to {project_name}...")
-        save_summary(repo_name, pr_number, ai_response.get("pr_summary", {}))
+        # Include author for the summary
+        pr_summary = ai_response.get("pr_summary", {})
+        pr_summary["author"] = author_handle
+        
+        save_summary(repo_name, pr_number, pr_summary)
         update_developer_profile(project_name, author_handle, updated_profile)
 
         print("Done! Agent finished successfully.")

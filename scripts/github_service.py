@@ -1,12 +1,13 @@
 from typing import Dict, Union
 import requests
 import re
-from scripts.config import GH_PAT
+from config import GH_PAT
 
 HEADERS: Dict[str, Union[str, bytes]] = {
     "Authorization": f"Bearer {GH_PAT}",
     "Accept": "application/vnd.github.v3+json",
 }
+
 
 # --- List of noisy/junk files we do NOT want to send to the LLM ---
 IGNORE_PATTERNS = [

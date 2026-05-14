@@ -1,7 +1,7 @@
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud import firestore as google_firestore
-from scripts.config import FIREBASE_SERVICE_ACCOUNT_PATH
+from config import FIREBASE_SERVICE_ACCOUNT_PATH
 import os
 
 # Initialize Firebase
@@ -64,6 +64,7 @@ def save_summary(repo_name: str, pr_number: int, summary_data: dict):
             "repository": repo_name,
             "pr_number": pr_number,
             "status": "success",
+            "author": summary_data.get("author", "Unknown"),
             "pr_overview": summary_data.get("pr_overview", ""),
             "changes": summary_data.get("changes", []),
             "risk_assessment": summary_data.get("risk_assessment", {}),
@@ -131,12 +132,11 @@ def get_developer_profile(project_name: str, github_handle: str):
                 "quality": 5.0,
             },
             "temporal_history": [],
-            "focus_distribution": {
-                "Architecture": 0,
-                "Feature": 0,
-                "TechDebt": 0,
-                "Bugfix": 0,
-                "Security": 0,
+            "archetype_distribution": {
+                "architect": 0,
+                "plumber": 0,
+                "janitor": 0,
+                "bug_squasher": 0,
             },
             "skills_matrix": {},
         },
