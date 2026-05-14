@@ -5,6 +5,15 @@ from llm_service import summarize_pr
 from storage_service import save_summary
 
 def run():
+    # If the JSON content is passed as an env var, write it to a file first
+    fb_json_content = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+    fb_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH", "firebase-key.json")
+    
+    if fb_json_content and not os.path.exists(fb_path):
+        print(f"Creating {fb_path} from environment variable...")
+        with open(fb_path, "w") as f:
+            f.write(fb_json_content)
+
     # GitHub Actions provides the path to the event payload
     event_path = os.getenv("GITHUB_EVENT_PATH")
     
