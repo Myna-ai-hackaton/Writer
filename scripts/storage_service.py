@@ -32,18 +32,23 @@ def get_db():
     return firestore.client()
 
 
+def repo_to_project_id(repo_name: str) -> str:
+    """Normalize repo names into a stable Firestore document id."""
+    return repo_name.replace("/", "__")
+
+
 def save_summary(repo_name: str, pr_number: int, summary_data: dict):
     """
     Saves the rich, categorized AI summary to Firebase Firestore.
     """
     db = get_db()
-    project_name = repo_name.split("/")[-1]
+    project_id = repo_to_project_id(repo_name)
 
-    # New Hierarchical Path: myna_ai_info -> {Writer} -> prs -> {doc_id}
-    doc_id = f"{project_name}_pr_{pr_number}"
+    # New Hierarchical Path: myna_ai_info -> {owner__repo} -> prs -> {doc_id}
+    doc_id = f"{project_id}_pr_{pr_number}"
     doc_ref = (
         db.collection("myna_ai_info")
-        .document(project_name)
+        .document(project_id)
         .collection("prs")
         .document(doc_id)
     )
@@ -74,7 +79,7 @@ def save_summary(repo_name: str, pr_number: int, summary_data: dict):
 
     # Save to Firestore
     doc_ref.set(data)
-    print(f"Successfully synced PR #{pr_number} to {project_name}/prs")
+    print(f"Successfully synced PR #{pr_number} to {project_id}/prs")
 
 
 def summary_exists(repo_name: str, pr_number: int) -> bool:
@@ -83,12 +88,12 @@ def summary_exists(repo_name: str, pr_number: int) -> bool:
     Used for Idempotency to prevent duplicate LLM calls.
     """
     db = get_db()
-    project_name = repo_name.split("/")[-1]
+    project_id = repo_to_project_id(repo_name)
 
-    doc_id = f"{project_name}_pr_{pr_number}"
+    doc_id = f"{project_id}_pr_{pr_number}"
     doc_ref = (
         db.collection("myna_ai_info")
-        .document(project_name)
+        .document(project_id)
         .collection("prs")
         .document(doc_id)
     )
@@ -102,15 +107,16 @@ def summary_exists(repo_name: str, pr_number: int) -> bool:
     return False
 
 
-def get_developer_profile(project_name: str, github_handle: str):
+def get_developer_profile(repo_name: str, github_handle: str):
     """
-    Fetches the existing developer profile from Firestore under the project branch.
+    Fetches the existing developer profile from Firestore under the repo branch.
     Returns a dict or an empty template if not found.
     """
     db = get_db()
+    project_id = repo_to_project_id(repo_name)
     doc_ref = (
         db.collection("myna_ai_info")
-        .document(project_name)
+        .document(project_id)
         .collection("developers")
         .document(github_handle)
     )
@@ -144,14 +150,15 @@ def get_developer_profile(project_name: str, github_handle: str):
     }
 
 
-def update_developer_profile(project_name: str, github_handle: str, profile_data: dict):
+def update_developer_profile(repo_name: str, github_handle: str, profile_data: dict):
     """
-    Saves/Updates the evolved developer profile in Firestore under the project branch.
+    Saves/Updates the evolved developer profile in Firestore under the repo branch.
     """
     db = get_db()
+    project_id = repo_to_project_id(repo_name)
     doc_ref = (
         db.collection("myna_ai_info")
-        .document(project_name)
+        .document(project_id)
         .collection("developers")
         .document(github_handle)
     )
@@ -162,5 +169,5 @@ def update_developer_profile(project_name: str, github_handle: str, profile_data
 
     doc_ref.set(profile_data, merge=True)
     print(
-        f"Successfully evolved profile for @{github_handle} in {project_name}/developers"
+        f"Successfully evolved profile for @{github_handle} in {project_id}/developers"
     )

@@ -97,16 +97,22 @@ def summarize_pr(
     OUTPUT SCHEMA (Strict JSON):
     {{
       "signals": {{
-        "complexity": int,
-        "documentation": int,
-        "resilience": int,
-        "quality": int,
+        "complexity": 1-10,
+        "documentation": 1-10,
+        "resilience": 1-10,
+        "quality": 1-10,
         "primary_archetype": "architect|plumber|janitor|bug_squasher",
         "skills_used": ["string"]
       }},
       "pr_summary": {{
         "pr_overview": "string",
-        "changes": [{{ "category": "string", "impact": "string" }}],
+        "changes": [
+          {{
+            "category": "Feature|Bug Fix|Refactor|Chore|Docs|Test|Other",
+            "technical_description": "developer-facing explanation of what changed",
+            "business_description": "PM/user-facing explanation of the impact"
+          }}
+        ],
         "risk_assessment": {{ "level": "Low|Medium|High", "reasoning": "string" }},
         "core_files_touched": ["string"]
       }}
@@ -235,5 +241,16 @@ def evaluate_pr_and_update_profile(
         project_stats["prs_analyzed"] = project_stats.get("prs_analyzed", 0) + 1
         project_stats["primary_archetype"] = archetype
         project_stats["last_contribution"] = datetime.now().strftime("%Y-%m-%d")
+
+    profile["skills"] = p_state["skills_matrix"]
+    profile["overall_metrics"] = {
+        "total_prs_merged": p_state["activity_counters"].get("merged", 0),
+        "total_prs_denied": p_state["activity_counters"].get("denied", 0),
+        "average_complexity_score": p_state["rolling_metrics"].get("complexity", 5.0),
+        "documentation_habit_score": p_state["rolling_metrics"].get("docs", 5.0),
+        "review_resilience_score": p_state["rolling_metrics"].get("resilience", 5.0),
+        "initial_quality_score": p_state["rolling_metrics"].get("quality", 5.0),
+    }
+    profile["archetype_distribution"] = p_state["archetype_distribution"]
 
     return profile

@@ -171,7 +171,6 @@ on:
 
 jobs:
   summarize:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - name: Run Writer Agent
