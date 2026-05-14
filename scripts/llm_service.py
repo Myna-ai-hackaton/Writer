@@ -9,38 +9,69 @@ client = OpenAI(
 )
 
 def summarize_pr(pr_metadata: dict, diff: str) -> dict:
-    """Sends the PR data to OpenRouter and gets a structured JSON summary."""
-    
+    """
+    Sends the PR data and cleaned diff to OpenRouter.
+    Returns a highly structured JSON object categorizing every change.
+    """
+
+    # We use a system-level persona to ground the model's behavior. 
+    system_instruction = (
+        "You are a Staff Software Engineer and an Expert Product Manager. "
+        "Your job is to analyze raw Git Pull Requests and translate them into structured, "
+        "categorized, and highly accurate release summaries. "      
+        "You separate business value from technical implementation."
+    )
+
     prompt = f"""
-    You are an expert Git Project Manager. Analyze the following Pull Request and summarize it.
-    
-    PR Title: {pr_metadata['title']}
-    PR Description: {pr_metadata['body']}
-    PR Author: {pr_metadata['author']}
-    
-    Code Diff:
-    {diff[:10000]} # Truncating to avoid hitting context limits
-    
-    Return a STRICT JSON object with exactly these keys:
-    - "business_reason": A 1-sentence explanation of what feature/fix this introduces for non-technical users.
-    - "files_affected": A brief list or summary of core files changed.
-    - "risk_level": "Low", "Medium", or "High" (High if database, auth, or core payments are changed).
-    - "technical_summary": A 2-sentence summary for developers.
+    Analyze the following Pull Request data:
+
+    --- PR METADATA ---
+    Title: {pr_metadata.get('title', 'No Title')}
+    Author: {pr_metadata.get('author', 'Unknown')}
+    Description: {pr_metadata.get('body', 'No Description')}        
+
+    --- CODE DIFF ---
+    {diff}
+
+    --- INSTRUCTIONS ---
+    Break down the Pull Request into specific, categorized changes. 
+    Ignore trivial files (like version bumps or auto-generated content) unless they are the only change.
+
+    You MUST return a STRICT, valid JSON object matching this exact schema:
+    {{
+      "pr_overview": "A 1-2 sentence high-level summary of the entire PR's purpose.",
+      "changes": [
+        {{
+          "category": "Must be exactly one of: [Feature, Bugfix, Refactor, Performance, Security, Chore, Docs]",
+          "business_description": "How this specific change affects the user or business (non-technical).",
+          "technical_description": "What was actually changed in the code (developer-focused)."
+        }}
+      ],
+      "risk_assessment": {{
+        "level": "Low", "Medium", or "High",
+        "reasoning": "Why this risk level was assigned (e.g., 'Modifies database schema' = High)."
+      }},
+      "core_files_touched": ["List of the 2-5 most important files changed. Omit minor config files."]
+    }}
     """
 
     try:
         completion = client.chat.completions.create(
-          model="google/gemini-2.0-flash-001", # Or any other model available on OpenRouter
+          model="google/gemini-2.0-flash-001",
           messages=[
-            {
-              "role": "user",
-              "content": prompt,
-            },
+            {"role": "system", "content": system_instruction},      
+            {"role": "user", "content": prompt},
           ],
-          response_format={ "type": "json_object" }
+          response_format={ "type": "json_object" },
+          temperature=0.2 # Low temperature for factual, analytical output
         )
-        
-        return json.loads(completion.choices[0].message.content)
+
+        raw_json_string = completion.choices[0].message.content     
+        return json.loads(raw_json_string)
+
+    except json.JSONDecodeError:
+        print("Failed to parse LLM response into valid JSON.")      
+        return {"error": "Invalid JSON returned by LLM", "raw_output": raw_json_string}
     except Exception as e:
-        print(f"Failed to get summary from OpenRouter: {e}")
+        print(f"Failed to get summary from OpenRouter: {e}")        
         return {"error": str(e)}
