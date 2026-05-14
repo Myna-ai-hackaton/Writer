@@ -2,12 +2,34 @@
 
 An AI-powered Git Project Manager that summarizes Pull Requests and provides a queryable memory for project history.
 
-## How to use in any repository (Reusable Action)
+## How to use in any repository (Easy Setup)
 
-You don't need to copy any code to use this in a new repo. Simply create a workflow file and set up your secrets.
+The fastest way to get started is to run our automated setup script.
+
+### 1. Requirements
+- You must have the [GitHub CLI (`gh`)](https://cli.github.com/) installed and logged in (`gh auth login`).
+- You must have Python installed.
+
+### 2. Run the Setup Script
+Open your terminal in the root of the repository you want to monitor and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Myna-ai-hackaton/Writer/main/scripts/setup.py | python
+```
+
+This script will:
+1.  Ask for your `GH_PAT`, `OPENROUTER_API_KEY`, and Firebase JSON.
+2.  **Automatically** set your GitHub Repository Secrets using the `gh` CLI.
+3.  **Automatically** create the `.github/workflows/writer.yml` file.
+
+---
+
+## Manual Setup (Alternative)
+
+If you prefer to set up manually, follow these steps:
 
 ### 1. Create Workflow File
-In your target repository, create `.github/workflows/writer.yml`:
+Create `.github/workflows/writer.yml`:
 
 ```yaml
 name: Writer Agent
