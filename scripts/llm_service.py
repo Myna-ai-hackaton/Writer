@@ -21,12 +21,12 @@ def get_llm_client():
             api_key=OPENROUTER_API_KEY,
         )
         # Using a more standard ID for OpenRouter
-        return client, "openrouter", "google/gemini-flash-1.5"
+        return client, "openrouter", "google/gemini-2.5-flash"
     
     if GEMINI_API_KEY:
         print("Using Google Gemini (Direct) as the LLM provider.")
         client = genai.Client(api_key=GEMINI_API_KEY)
-        return client, "gemini", "gemini-1.5-flash"
+        return client, "gemini", "gemini-2.5-flash"
     
     raise ValueError("No AI API keys found. Please set OPENAI_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY.")
 
@@ -92,6 +92,8 @@ def summarize_pr(pr_metadata: dict, diff: str) -> dict:
         elif provider == "gemini":
             # New google-genai SDK call
             full_prompt = f"{system_instruction}\n\n{prompt}"
+            # In May 2026, the SDK might have changed, but I'll stick to the current implementation
+            # and only update the model name as requested.
             response = client.models.generate_content(
                 model=model,
                 contents=full_prompt,
