@@ -1,7 +1,7 @@
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud import firestore as google_firestore
-from config import FIREBASE_SERVICE_ACCOUNT_PATH
+from scripts.config import FIREBASE_SERVICE_ACCOUNT_PATH
 import os
 
 # Initialize Firebase
@@ -59,15 +59,13 @@ def save_summary(repo_name: str, pr_number: int, summary_data: dict):
             "timestamp": google_firestore.SERVER_TIMESTAMP,
         }
     else:
-        # This maps directly to the new structured JSON array we requested from OpenRouter
+        # Matches the new "Sensor vs. Brain" schema
         data = {
             "repository": repo_name,
             "pr_number": pr_number,
             "status": "success",
             "pr_overview": summary_data.get("pr_overview", ""),
-            "changes": summary_data.get(
-                "changes", []
-            ),  # This is our new categorized array
+            "changes": summary_data.get("changes", []),
             "risk_assessment": summary_data.get("risk_assessment", {}),
             "core_files_touched": summary_data.get("core_files_touched", []),
             "timestamp": google_firestore.SERVER_TIMESTAMP,
@@ -124,20 +122,24 @@ def get_developer_profile(project_name: str, github_handle: str):
     return {
         "github_handle": github_handle,
         "last_active": None,
-        "overall_metrics": {
-            "total_prs_merged": 0,
-            "average_complexity_score": 0,
-            "documentation_habit_score": 0,
-            "review_resilience_score": 0,
-            "initial_quality_score": 0,
+        "python_managed_state": {
+            "activity_counters": {"merged": 0, "denied": 0},
+            "rolling_metrics": {
+                "complexity": 5.0,
+                "docs": 5.0,
+                "resilience": 5.0,
+                "quality": 5.0,
+            },
+            "temporal_history": [],
+            "focus_distribution": {
+                "Architecture": 0,
+                "Feature": 0,
+                "TechDebt": 0,
+                "Bugfix": 0,
+                "Security": 0,
+            },
+            "skills_matrix": {},
         },
-        "archetype_distribution": {
-            "architect": 0,
-            "plumber": 0,
-            "janitor": 0,
-            "bug_squasher": 0,
-        },
-        "skills": {},
         "projects": {},
     }
 
