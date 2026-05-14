@@ -14,7 +14,7 @@ The fastest way to get started is to run our automated setup script.
 Open your terminal in the root of the repository you want to monitor and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Myna-ai-hackaton/Writer/main/scripts/setup.py | python
+python -c "$(curl -fsSL https://raw.githubusercontent.com/Myna-ai-hackaton/Writer/main/scripts/setup.py)"
 ```
 
 This script will:

@@ -14,14 +14,26 @@ def run_command(cmd_list):
         print(f"Error running command {' '.join(cmd_list)}: {e.stderr}")
         return None
 
+def check_gh_auth():
+    try:
+        result = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
+        return result.returncode == 0
+    except:
+        return False
+
 def setup():
     print("🚀 Welcome to the Writer Agent Setup!")
     print("This script will configure your repository to use the AI Talent Analytics pipeline.\n")
 
-    # 1. Check for GitHub CLI
+    # 1. Check for GitHub CLI and Auth
     if not check_command("gh"):
         print("❌ Error: GitHub CLI ('gh') is not installed.")
-        print("Please install it from https://cli.github.com/ and login with 'gh auth login'.")
+        print("Please install it from https://cli.github.com/")
+        sys.exit(1)
+    
+    if not check_gh_auth():
+        print("❌ Error: GitHub CLI is not logged in.")
+        print("Please run 'gh auth login' first to authenticate with your GitHub account.")
         sys.exit(1)
 
     # 2. Check if we are in a Git repo
