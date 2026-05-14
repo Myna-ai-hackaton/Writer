@@ -5,13 +5,14 @@ An AI-powered Git Project Manager that summarizes Pull Requests and provides a q
 ## Project Structure
 
 - `scripts/`: Contains the core logic services.
-  - `main.py`: The FastAPI webhook listener.
+  - `agent_action.py`: The entry point for the GitHub Action.
   - `github_service.py`: Handles GitHub API calls.
-  - `llm_service.py`: Processes PR data with Gemini AI.
-  - `storage_service.py`: Manages the local JSON memory index.
+  - `llm_service.py`: Processes PR data with OpenRouter AI.
+  - `storage_service.py`: Manages the Firebase cloud memory.
   - `config.py`: Configuration and secrets management.
 - `requirements.txt`: Python dependencies.
 - `Dockerfile`: Docker configuration for the agent.
+- `action.yml`: GitHub Action metadata.
 - `.env`: Environment variables (API keys).
 
 ## Setup
@@ -24,17 +25,16 @@ An AI-powered Git Project Manager that summarizes Pull Requests and provides a q
 3.  **Configure Environment Variables:**
     Create a `.env` file in the root directory and fill in your keys:
     - `GITHUB_TOKEN`: A Personal Access Token with repo scope.
-    - `GEMINI_API_KEY`: Your Google AI API key.
-4.  **Run the Agent:**
-    ```bash
-    python scripts/main.py
-    ```
-5.  **Expose the Webhook:**
-    Use a tool like `ngrok` to expose port 8000 and configure the URL in your GitHub repository's webhook settings.
+    - `OPENROUTER_API_KEY`: Your OpenRouter API key.
+    - `FIREBASE_SERVICE_ACCOUNT_PATH`: Path to your firebase-key.json.
+
+4.  **Wait for PRs:**
+    The agent will now run automatically on every merged Pull Request via GitHub Actions.
 
 ## How it works
 
-1.  GitHub sends a webhook when a PR is merged.
-2.  The `Writer` agent fetches the PR metadata and code diff.
-3.  Gemini AI summarizes the changes into a business-readable format.
-4.  The summary is saved to **Firebase Firestore** in real-time.
+1.  A Pull Request is merged into the `main` branch.
+2.  The GitHub Action triggers and runs the `Writer` agent.
+3.  The agent fetches the PR metadata and code diff.
+4.  OpenRouter AI summarizes the changes into a business-readable format.
+5.  The summary is saved to **Firebase Firestore** in real-time.
