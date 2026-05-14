@@ -37,4 +37,4 @@ An AI-powered Git Project Manager that summarizes Pull Requests and provides a q
 1.  GitHub sends a webhook when a PR is merged.
 2.  The `Writer` agent fetches the PR metadata and code diff.
 3.  Gemini AI summarizes the changes into a business-readable format.
-4.  The summary is saved to `memory_index.json`.
+4.  The summary is saved to **Firebase Firestore** in real-time.

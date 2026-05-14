@@ -1,32 +1,33 @@
-import json
-import os
-from config import MEMORY_FILE_PATH
+import firebase_admin
+from firebase_admin import credentials, firestore
+from config import FIREBASE_SERVICE_ACCOUNT_PATH
+
+# Initialize Firebase
+# This only needs to happen once
+if not firebase_admin._apps:
+    cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_PATH)
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
 
 def save_summary(repo_name: str, pr_number: int, summary_data: dict):
-    """Saves the AI summary to a local JSON file (acting as our database)."""
+    """Saves the AI summary to Firebase Firestore."""
     
-    # Create the file if it doesn't exist
-    if not os.path.exists(MEMORY_FILE_PATH):
-        with open(MEMORY_FILE_PATH, 'w') as f:
-            json.dump([], f)
-
-    # Read existing memory
-    with open(MEMORY_FILE_PATH, 'r') as f:
-        try:
-            memory = json.load(f)
-        except json.JSONDecodeError:
-            memory = []
-
-    # Create the new entry
-    new_entry = {
+    # We use repo_name + pr_number as a unique ID to avoid duplicates
+    doc_id = f"{repo_name.replace('/', '_')}_pr_{pr_number}"
+    
+    doc_ref = db.collection("summaries").document(doc_id)
+    
+    data = {
         "repository": repo_name,
         "pr_number": pr_number,
-        "summary": summary_data
+        "business_reason": summary_data.get("business_reason"),
+        "files_affected": summary_data.get("files_affected"),
+        "risk_level": summary_data.get("risk_level"),
+        "technical_summary": summary_data.get("technical_summary"),
+        "timestamp": firestore.SERVER_TIMESTAMP # Good for the Reader to sort by latest
     }
 
-    # Append and save
-    memory.append(new_entry)
-    with open(MEMORY_FILE_PATH, 'w') as f:
-        json.dump(memory, f, indent=4)
-        
-    print(f"Successfully saved PR #{pr_number} to memory!")
+    doc_ref.set(data)
+    
+    print(f"Successfully synced PR #{pr_number} to Firebase Cloud!")
