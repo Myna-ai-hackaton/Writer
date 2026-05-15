@@ -14,13 +14,21 @@ The fastest way to get started is to run our automated setup script.
 Open your terminal in the root of the repository you want to monitor and run:
 
 ```bash
+python scripts/setup.py
+```
+
+If you want to run the latest remote version directly, you can also use:
+
+```bash
 python -c "$(curl -fsSL https://raw.githubusercontent.com/Myna-ai-hackaton/Writer/main/scripts/setup.py)"
 ```
 
-This script will:
-1.  Ask for your `GH_PAT`, preferred AI provider (OpenRouter/Gemini/OpenAI), and Firebase JSON.
-2.  **Automatically** set your GitHub Repository Secrets using the `gh` CLI.
-3.  **Automatically** create the `.github/workflows/writer.yml` file.
+The script will:
+1.  Use any existing environment variables for `GH_PAT`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, and `FIREBASE_SERVICE_ACCOUNT_PATH`.
+2.  Prompt for any missing keys or Firebase JSON content interactively.
+3.  Fetch closed PR history from GitHub and import summaries into Firebase.
+
+> Note: A `.env` file is optional. The script reads from environment variables first, and only prompts you when values are missing.
 
 ---
 
