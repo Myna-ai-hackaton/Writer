@@ -74,7 +74,6 @@ def save_summary(repo_name: str, pr_number: int, summary_data: dict):
             "changes": summary_data.get("changes", []),
             "risk_assessment": summary_data.get("risk_assessment", {}),
             "core_files_touched": summary_data.get("core_files_touched", []),
-            "time_open_hours": summary_data.get("time_open_hours"),
             "time_open_days": summary_data.get("time_open_days"),
             "timestamp": google_firestore.SERVER_TIMESTAMP,
         }
