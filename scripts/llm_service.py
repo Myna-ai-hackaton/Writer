@@ -60,8 +60,9 @@ def summarize_pr(
 
     system_instruction = (
         "You are an Elite Engineering Mentor and a Technical Auditor. "
-        "Extract raw engineering signals from the PR. DO NOT perform any math or averages. "
-        "Return a valid JSON object."
+        "Extract raw engineering signals from the PR diff and metadata. "
+        "Return exactly one valid JSON object only. "
+        "Do not include markdown fences, commentary, or explanation."
     )
 
     developer_context = ""
@@ -89,10 +90,12 @@ def summarize_pr(
     {developer_context}
 
     --- INSTRUCTIONS ---
-    1. Extract Signals (1-10): complexity, documentation, resilience, quality.
-    2. Identify Archetype: architect (structure), plumber (logic), janitor (maintenance), bug_squasher (fixes).
-    3. Identify: skills_used[].
-    4. Generate Summary: Categorized release notes (business vs. technical impact).
+    1. Use the diff and metadata to determine engineering signal values.
+    2. Extract Scores (1-10): complexity, documentation, resilience, quality.
+    3. Identify archetype: architect, plumber, janitor, or bug_squasher.
+    4. Identify skills_used[].
+    5. Generate a structured PR summary with technical and business descriptions.
+    6. Output exactly one JSON object and nothing else.
 
     OUTPUT SCHEMA (Strict JSON):
     {{
@@ -128,10 +131,12 @@ def summarize_pr(
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": prompt},
                 ],
-                response_format={"type": "json_object"},
-                temperature=0.2,
+                temperature=0.0,
             )
-            raw_json_string = completion.choices[0].message.content or ""
+            raw_output = completion.choices[0].message.content
+            if isinstance(raw_output, dict):
+                return raw_output
+            raw_json_string = str(raw_output or "")
 
         elif provider == "gemini":
             response = client_any.models.generate_content(
