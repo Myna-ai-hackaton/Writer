@@ -1,201 +1,299 @@
+import json
 import os
-import sys
 import subprocess
-import shutil
+import sys
+import time
+from getpass import getpass
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import requests
 
 
-def check_command(cmd):
-    return shutil.which(cmd) is not None
+GITHUB_API_HEADERS: Dict[str, str] = {
+    "Accept": "application/vnd.github.v3+json",
+    "User-Agent": "myna-writer-bootstrap",
+}
 
 
-def run_command(cmd_list):
+def prompt_secret(env_key: str, prompt_text: str) -> str:
+    value = os.getenv(env_key)
+    if value:
+        return value
+    return getpass(prompt_text).strip()
+
+
+def prompt_value(env_key: str, prompt_text: str, default: Optional[str] = None) -> str:
+    value = os.getenv(env_key)
+    if value:
+        return value
+
+    prompt_suffix = f" [{default}]" if default else ""
+    result = input(f"{prompt_text}{prompt_suffix}: ").strip()
+    if not result and default is not None:
+        return default
+    return result
+
+
+def parse_github_repo(remote_url: str) -> Optional[str]:
+    if remote_url.endswith(".git"):
+        remote_url = remote_url[:-4]
+
+    if remote_url.startswith("git@github.com:"):
+        return remote_url.split(":", 1)[1]
+    if remote_url.startswith("https://github.com/"):
+        return remote_url.split("https://github.com/", 1)[1]
+    if remote_url.startswith("ssh://git@github.com/"):
+        return remote_url.split("ssh://git@github.com/", 1)[1]
+    if remote_url.startswith("git://github.com/"):
+        return remote_url.split("git://github.com/", 1)[1]
+    if "/github.com/" in remote_url:
+        return remote_url.split("github.com/", 1)[1]
+    return None
+
+
+def infer_repo_full_name() -> str:
+    repo = os.getenv("GITHUB_REPOSITORY") or os.getenv("GH_REPO")
+    if repo:
+        return repo
+
     try:
-        result = subprocess.run(cmd_list, check=True, capture_output=True, text=True)
-        return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        print(f"Error running command {' '.join(cmd_list)}: {e.stderr}")
-        return None
-
-
-def check_gh_auth():
-    try:
-        result = subprocess.run(
-            ["gh", "auth", "status"], capture_output=True, text=True
+        completed = subprocess.run(
+            ["git", "config", "--get", "remote.origin.url"],
+            capture_output=True,
+            text=True,
+            check=True,
         )
-        return result.returncode == 0
-    except Exception:
-        return False
+        remote_url = completed.stdout.strip()
+        repo = parse_github_repo(remote_url)
+        if repo:
+            return repo
+    except subprocess.CalledProcessError:
+        pass
+
+    repo = input("Enter the GitHub repository full name (owner/repo): ").strip()
+    if "/" not in repo:
+        print("Invalid repository name. Expected format owner/repo.")
+        sys.exit(1)
+    return repo
 
 
-def setup():
-    print("🚀 Welcome to the Writer Agent Setup!")
-    print(
-        "This script will configure your repository to use the AI Talent Analytics pipeline.\n"
+def ensure_firebase_key() -> str:
+    default_path = "firebase-key.json"
+    fb_path = prompt_value(
+        "FIREBASE_SERVICE_ACCOUNT_PATH",
+        "Enter Firebase service account JSON path",
+        default_path,
     )
 
-    # 1. Check for GitHub CLI and Auth
-    if not check_command("gh"):
-        print("❌ Error: GitHub CLI ('gh') is not installed.")
-        print("Please install it from https://cli.github.com/")
+    if not fb_path:
+        fb_path = default_path
+
+    fb_path_obj = Path(fb_path)
+    if fb_path_obj.exists():
+        return str(fb_path_obj.resolve())
+
+    print(
+        "Firebase key file was not found locally. You can either provide a path to an existing file or paste the JSON content."
+    )
+    existing_path = input("Enter an existing path if you have one, or press enter to paste JSON: ").strip()
+    if existing_path:
+        existing_obj = Path(existing_path)
+        if existing_obj.exists():
+            return str(existing_obj.resolve())
+        print(f"Path not found: {existing_path}")
+
+    content = getpass("Paste the Firebase service account JSON here: ")
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        print("The provided content is not valid JSON.")
         sys.exit(1)
 
-    if not check_gh_auth():
-        print("❌ Error: GitHub CLI is not logged in.")
-        print(
-            "Please run 'gh auth login' first to authenticate with your GitHub account."
-        )
+    fb_path_obj.write_text(json.dumps(parsed, indent=2))
+    print(f"Wrote Firebase service account JSON to {fb_path_obj}")
+    return str(fb_path_obj.resolve())
+
+
+def choose_llm_provider() -> None:
+    openai_key = os.getenv("OPENAI_API_KEY")
+    openrouter_key = os.getenv("OPENROUTER_API_KEY")
+    gemini_key = os.getenv("GEMINI_API_KEY")
+
+    if openai_key or openrouter_key or gemini_key:
+        return
+
+    print("No LLM key found in the environment. Select one provider:")
+    print("1) OpenAI")
+    print("2) OpenRouter")
+    print("3) Google Gemini")
+
+    choice = input("Choose 1, 2, or 3: ").strip()
+    if choice == "1":
+        key = prompt_secret("OPENAI_API_KEY", "Enter OPENAI_API_KEY: ")
+        os.environ["OPENAI_API_KEY"] = key
+    elif choice == "2":
+        key = prompt_secret("OPENROUTER_API_KEY", "Enter OPENROUTER_API_KEY: ")
+        os.environ["OPENROUTER_API_KEY"] = key
+    elif choice == "3":
+        key = prompt_secret("GEMINI_API_KEY", "Enter GEMINI_API_KEY: ")
+        os.environ["GEMINI_API_KEY"] = key
+    else:
+        print("Invalid choice. Please run the script again.")
         sys.exit(1)
 
-    # 2. Check if we are in a Git repo
-    if not os.path.exists(".git"):
-        print("❌ Error: This script must be run from the root of a Git repository.")
+
+def configure_environment() -> None:
+    gh_pat = os.getenv("GH_PAT")
+    if not gh_pat:
+        gh_pat = prompt_secret("GH_PAT", "Enter GH_PAT: ")
+        os.environ["GH_PAT"] = gh_pat
+
+    firebase_path = ensure_firebase_key()
+    os.environ["FIREBASE_SERVICE_ACCOUNT_PATH"] = firebase_path
+
+    choose_llm_provider()
+
+    if not os.getenv("GH_PAT"):
+        print("GH_PAT is required.")
         sys.exit(1)
 
-    # 3. Get existing secrets
-    print("🔍 Checking existing secrets...")
-    existing_secrets_raw = run_command(["gh", "secret", "list"])
-    existing_secrets = []
-    if existing_secrets_raw:
-        for line in existing_secrets_raw.splitlines():
-            if line.strip():
-                existing_secrets.append(line.split()[0])
 
-    # 4. Collect API Keys
-    secrets_to_set = {}
-
-    print("\n--- Configuration ---")
-
-    # Helper to check and prompt
-    def prompt_for_secret(name, label, is_file=False):
-        if name in existing_secrets:
-            choice = input(
-                f"🔹 Secret '{name}' already exists. Update it? (y/n): "
-            ).lower()
-            if choice != "y":
-                return None
-
-        val = input(f"Enter {label}: ").strip()
-        if not val:
-            return None
-
-        if is_file:
-            if not os.path.exists(val):
-                print(f"   ❌ Error: File not found at {val}")
-                return None
-            try:
-                with open(val, "r") as f:
-                    content = f.read()
-                    # Basic Firebase JSON Validation
-                    if "project_id" not in content or "private_key" not in content:
-                        print(
-                            "   ⚠️ Warning: This doesn't look like a valid Firebase Service Account JSON."
-                        )
-                    return content
-            except Exception as e:
-                print(f"   ❌ Error reading file: {e}")
-                return None
-        return val
-
-    gh_pat = prompt_for_secret("GH_PAT", "your GitHub PAT (with repo scope)")
+def github_request(url: str, params: Dict[str, str]) -> dict:
+    headers = GITHUB_API_HEADERS.copy()
+    gh_pat = os.getenv("GH_PAT")
     if gh_pat:
-        secrets_to_set["GH_PAT"] = gh_pat
+        headers["Authorization"] = f"Bearer {gh_pat}"
 
-    # LLM Provider Choice
-    print("\nSelect your AI Provider:")
-    print("1. OpenRouter (Supports Gemini 2.5 Flash)")
-    print("2. Google Gemini (Direct API)")
-    print("3. OpenAI (ChatGPT)")
-    provider_choice = input("Choice (1-3): ").strip()
+    response = requests.get(url, headers=headers, params=params, timeout=30)
+    if response.status_code == 403:
+        raise RuntimeError(
+            f"GitHub API rate limit or permission error: {response.status_code} {response.text}"
+        )
+    response.raise_for_status()
+    return response.json()
 
-    if provider_choice == "1":
-        key = prompt_for_secret("OPENROUTER_API_KEY", "your OpenRouter API Key")
-        if key:
-            secrets_to_set["OPENROUTER_API_KEY"] = key
-    elif provider_choice == "2":
-        key = prompt_for_secret("GEMINI_API_KEY", "your Google Gemini API Key")
-        if key:
-            secrets_to_set["GEMINI_API_KEY"] = key
-    elif provider_choice == "3":
-        key = prompt_for_secret("OPENAI_API_KEY", "your OpenAI API Key")
-        if key:
-            secrets_to_set["OPENAI_API_KEY"] = key
 
-    fb_json = prompt_for_secret(
-        "FIREBASE_SERVICE_ACCOUNT_JSON",
-        "the path to your Firebase JSON file",
-        is_file=True,
+def fetch_closed_pr_numbers(repo_full_name: str) -> List[int]:
+    pr_numbers: List[int] = []
+    page = 1
+
+    while True:
+        params = {"state": "closed", "per_page": "100", "page": str(page)}
+        items = github_request(
+            f"https://api.github.com/repos/{repo_full_name}/pulls", params
+        )
+        if not items:
+            break
+
+        for item in items:
+            if item.get("number"):
+                pr_numbers.append(int(item["number"]))
+
+        page += 1
+        time.sleep(0.5)
+
+    return pr_numbers
+
+
+def print_progress(index: int, total: int, pr_number: int, status: str) -> None:
+    print(f"[{index}/{total}] PR #{pr_number}: {status}")
+
+
+def process_pr(repo_full_name: str, pr_number: int):
+    from github_service import fetch_full_pr_context
+    from llm_service import evaluate_pr_and_update_profile, summarize_pr
+    from storage_service import (
+        get_developer_profile,
+        save_summary,
+        summary_exists,
+        update_developer_profile,
     )
-    if fb_json:
-        secrets_to_set["FIREBASE_SERVICE_ACCOUNT_JSON"] = fb_json
 
-    # 5. Set GitHub Secrets
-    if secrets_to_set:
-        print("\n🔐 Setting up GitHub Secrets...")
-        for name, value in secrets_to_set.items():
-            print(f"   Setting {name}...")
-            proc = subprocess.Popen(
-                ["gh", "secret", "set", name],
-                stdin=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
+    try:
+        if summary_exists(repo_full_name, pr_number):
+            return "skipped-already-summarized"
+
+        full_context = fetch_full_pr_context(repo_full_name, pr_number)
+        full_context["pr_number"] = pr_number
+        author_handle = full_context["metadata"].get("author", "unknown")
+
+        existing_profile = get_developer_profile(repo_full_name, author_handle)
+        ai_response = summarize_pr(full_context, existing_profile)
+
+        if "error" in ai_response:
+            save_summary(repo_full_name, pr_number, ai_response)
+            return "saved-error"
+
+        updated_profile = evaluate_pr_and_update_profile(
+            ai_response, full_context, existing_profile
+        )
+
+        pr_summary = ai_response.get("pr_summary", {})
+        pr_summary["author"] = author_handle
+
+        save_summary(repo_full_name, pr_number, pr_summary)
+        update_developer_profile(repo_full_name, author_handle, updated_profile)
+        return "saved-success"
+
+    except Exception as exc:
+        print(f"Error processing PR #{pr_number}: {exc}")
+        try:
+            from storage_service import save_summary
+
+            save_summary(
+                repo_full_name,
+                pr_number,
+                {"error": str(exc), "raw_output": ""},
             )
-            _, err = proc.communicate(input=value)
-            if proc.returncode != 0:
-                print(f"   ❌ Failed to set {name}: {err}")
-                sys.exit(1)
-    else:
-        print("\nℹ️ No secrets updated.")
+        except Exception:
+            pass
+        return "failed"
 
-    # 6. Create Workflow File
-    workflow_dir = ".github/workflows"
-    workflow_path = os.path.join(workflow_dir, "writer.yml")
 
-    should_create_workflow = True
-    if os.path.exists(workflow_path):
-        choice = input(
-            f"\n🔹 Workflow file '{workflow_path}' already exists. Overwrite it? (y/n): "
-        ).lower()
-        if choice != "y":
-            should_create_workflow = False
+def main() -> None:
+    print("Writer bootstrap: importing closed PR history into Firebase")
+    repo_full_name = infer_repo_full_name()
+    print(f"Repository detected: {repo_full_name}")
 
-    if should_create_workflow:
-        print("\n📄 Creating GitHub Workflow file...")
-        os.makedirs(workflow_dir, exist_ok=True)
+    configure_environment()
 
-        workflow_content = """name: Writer Agent
+    # Import modules after the environment is configured so config values are loaded correctly.
+    import importlib
+    import config as config_module
 
-on:
-  pull_request:
-    types: [closed]
-    branches: [main]
+    importlib.reload(config_module)
 
-jobs:
-  summarize:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Run Writer Agent
-        uses: Myna-ai-hackaton/Writer@main
-        with:
-          gh_pat: ${{ secrets.GH_PAT }}
-          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
-          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          firebase_service_account_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-"""
+    pr_numbers = fetch_closed_pr_numbers(repo_full_name)
+    if not pr_numbers:
+        print("No closed PRs found.")
+        return
 
-        with open(workflow_path, "w") as f:
-            f.write(workflow_content)
-        print(f"✅ Created {workflow_path}")
-    else:
-        print(f"\nℹ️ Skipped creating {workflow_path}")
+    print(f"Found {len(pr_numbers)} closed PR(s). This may trigger many LLM calls.")
+    confirm = input("Continue and process all closed PRs? [y/N]: ").strip().lower()
+    if confirm != "y":
+        print("Aborted by user.")
+        return
 
-    print("\n✨ Setup Complete!")
-    print(
-        "1. Commit the new workflow file: 'git add .github/workflows/writer.yml && git commit -m \"Add Writer Agent\"'"
-    )
-    print("2. Push to GitHub.")
-    print("The Writer Agent will now analyze every merged PR in this repo!")
+    summary_counts = {
+        "saved-success": 0,
+        "skipped-already-summarized": 0,
+        "saved-error": 0,
+        "failed": 0,
+    }
+
+    total = len(pr_numbers)
+    for index, pr_number in enumerate(pr_numbers, start=1):
+        status = process_pr(repo_full_name, pr_number)
+        summary_counts[status] = summary_counts.get(status, 0) + 1
+        print_progress(index, total, pr_number, status)
+        time.sleep(1)
+
+    print("\nImport complete.")
+    print("Summary:")
+    for key, count in summary_counts.items():
+        print(f"  {key}: {count}")
 
 
 if __name__ == "__main__":
-    setup()
+    main()
