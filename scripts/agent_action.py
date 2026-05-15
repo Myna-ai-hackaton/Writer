@@ -1,6 +1,7 @@
 import os
 import json
 import sys
+from datetime import datetime
 from github_service import fetch_full_pr_context
 from llm_service import summarize_pr, evaluate_pr_and_update_profile
 from storage_service import (
@@ -9,6 +10,16 @@ from storage_service import (
     get_developer_profile,
     update_developer_profile,
 )
+
+
+def _parse_iso_timestamp(timestamp: str | None) -> datetime | None:
+    if not timestamp:
+        return None
+    try:
+        return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
 
 
 def run():
@@ -93,7 +104,21 @@ def run():
         # Include author for the summary
         pr_summary = ai_response.get("pr_summary", {})
         pr_summary["author"] = author_handle
-        
+
+        created_at = full_context["stats"].get("created_at")
+        closed_at = full_context["stats"].get("merged_at") or full_context["stats"].get("closed_at")
+        created_dt = _parse_iso_timestamp(created_at)
+        closed_dt = _parse_iso_timestamp(closed_at)
+
+        if created_dt and closed_dt:
+            delta = closed_dt - created_dt
+            pr_summary["time_open_hours"] = round(delta.total_seconds() / 3600, 2)
+            pr_summary["time_open_days"] = round(delta.total_seconds() / 86400, 2)
+        elif created_dt:
+            delta = datetime.utcnow() - created_dt
+            pr_summary["time_open_hours"] = round(delta.total_seconds() / 3600, 2)
+            pr_summary["time_open_days"] = round(delta.total_seconds() / 86400, 2)
+
         save_summary(repo_name, pr_number, pr_summary)
         update_developer_profile(repo_name, author_handle, updated_profile)
 

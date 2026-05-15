@@ -117,7 +117,8 @@ def fetch_full_pr_context(repo_full_name: str, pr_number: int) -> dict:
             "changed_files": data.get("changed_files", 0),
             "commits": data.get("commits", 0),
             "created_at": data.get("created_at"),
-            "merged_at": merged_at
+            "merged_at": merged_at,
+            "closed_at": data.get("closed_at"),
         },
         "test_stats": {
             "test_file_count": test_files,
