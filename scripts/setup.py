@@ -9,6 +9,17 @@ from typing import Dict, List, Optional
 
 import requests
 
+# Early check to ensure the rest of the project files exist
+try:
+    import config
+    import github_service
+    import llm_service
+    import storage_service
+except ImportError as e:
+    print(f"CRITICAL ERROR: Missing required local module: {e.name}.py")
+    print("This script is part of a larger project and cannot be run standalone.")
+    sys.exit(1)
+
 
 GITHUB_API_HEADERS: Dict[str, str] = {
     "Accept": "application/vnd.github.v3+json",
@@ -53,25 +64,8 @@ def parse_github_repo(remote_url: str) -> Optional[str]:
 
 
 def infer_repo_full_name() -> str:
-    repo = os.getenv("GITHUB_REPOSITORY") or os.getenv("GH_REPO")
-    if repo:
-        return repo
-
-    try:
-        completed = subprocess.run(
-            ["git", "config", "--get", "remote.origin.url"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        remote_url = completed.stdout.strip()
-        repo = parse_github_repo(remote_url)
-        if repo:
-            return repo
-    except subprocess.CalledProcessError:
-        pass
-
-    repo = input("Enter the GitHub repository full name (owner/repo): ").strip()
+    # Auto-detection removed. Forces manual input every time.
+    repo = input("Enter the GitHub repository full name (owner/repo) to analyze: ").strip()
     if "/" not in repo:
         print("Invalid repository name. Expected format owner/repo.")
         sys.exit(1)
@@ -116,6 +110,7 @@ def ensure_firebase_key() -> str:
 
 
 def choose_llm_provider() -> None:
+    # Fixed: Actually check if the keys are already in the environment
     openai_key = os.getenv("OPENAI_API_KEY")
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
     gemini_key = os.getenv("GEMINI_API_KEY")
@@ -174,7 +169,7 @@ def github_request(url: str, params: Dict[str, str]) -> dict:
     return response.json()
 
 
-def fetch_closed_pr_numbers(repo_full_name: str) -> List[int]:
+def fetch_closed_pr_numbers(repo_full_name: str, limit: Optional[int] = None) -> List[int]:
     pr_numbers: List[int] = []
     page = 1
 
@@ -189,6 +184,9 @@ def fetch_closed_pr_numbers(repo_full_name: str) -> List[int]:
         for item in items:
             if item.get("number"):
                 pr_numbers.append(int(item["number"]))
+                # Added: Stop fetching if we hit the requested limit
+                if limit and len(pr_numbers) >= limit:
+                    return pr_numbers
 
         page += 1
         time.sleep(0.5)
@@ -201,47 +199,37 @@ def print_progress(index: int, total: int, pr_number: int, status: str) -> None:
 
 
 def process_pr(repo_full_name: str, pr_number: int):
-    from github_service import fetch_full_pr_context
-    from llm_service import evaluate_pr_and_update_profile, summarize_pr
-    from storage_service import (
-        get_developer_profile,
-        save_summary,
-        summary_exists,
-        update_developer_profile,
-    )
-
+    # Imports moved to the top of the file for safer early failure detection
     try:
-        if summary_exists(repo_full_name, pr_number):
+        if storage_service.summary_exists(repo_full_name, pr_number):
             return "skipped-already-summarized"
 
-        full_context = fetch_full_pr_context(repo_full_name, pr_number)
+        full_context = github_service.fetch_full_pr_context(repo_full_name, pr_number)
         full_context["pr_number"] = pr_number
         author_handle = full_context["metadata"].get("author", "unknown")
 
-        existing_profile = get_developer_profile(repo_full_name, author_handle)
-        ai_response = summarize_pr(full_context, existing_profile)
+        existing_profile = storage_service.get_developer_profile(repo_full_name, author_handle)
+        ai_response = llm_service.summarize_pr(full_context, existing_profile)
 
         if "error" in ai_response:
-            save_summary(repo_full_name, pr_number, ai_response)
+            storage_service.save_summary(repo_full_name, pr_number, ai_response)
             return "saved-error"
 
-        updated_profile = evaluate_pr_and_update_profile(
+        updated_profile = llm_service.evaluate_pr_and_update_profile(
             ai_response, full_context, existing_profile
         )
 
         pr_summary = ai_response.get("pr_summary", {})
         pr_summary["author"] = author_handle
 
-        save_summary(repo_full_name, pr_number, pr_summary)
-        update_developer_profile(repo_full_name, author_handle, updated_profile)
+        storage_service.save_summary(repo_full_name, pr_number, pr_summary)
+        storage_service.update_developer_profile(repo_full_name, author_handle, updated_profile)
         return "saved-success"
 
     except Exception as exc:
         print(f"Error processing PR #{pr_number}: {exc}")
         try:
-            from storage_service import save_summary
-
-            save_summary(
+            storage_service.save_summary(
                 repo_full_name,
                 pr_number,
                 {"error": str(exc), "raw_output": ""},
@@ -260,17 +248,19 @@ def main() -> None:
 
     # Import modules after the environment is configured so config values are loaded correctly.
     import importlib
-    import config as config_module
+    importlib.reload(config)
 
-    importlib.reload(config_module)
+    # Added limit prompt to prevent massive LLM bills on large repos like libOTe
+    limit_input = input("Enter max number of PRs to process (press Enter for all): ").strip()
+    pr_limit = int(limit_input) if limit_input.isdigit() else None
 
-    pr_numbers = fetch_closed_pr_numbers(repo_full_name)
+    pr_numbers = fetch_closed_pr_numbers(repo_full_name, limit=pr_limit)
     if not pr_numbers:
         print("No closed PRs found.")
         return
 
     print(f"Found {len(pr_numbers)} closed PR(s). This may trigger many LLM calls.")
-    confirm = input("Continue and process all closed PRs? [y/N]: ").strip().lower()
+    confirm = input("Continue and process these PRs? [y/N]: ").strip().lower()
     if confirm != "y":
         print("Aborted by user.")
         return
@@ -287,7 +277,7 @@ def main() -> None:
         status = process_pr(repo_full_name, pr_number)
         summary_counts[status] = summary_counts.get(status, 0) + 1
         print_progress(index, total, pr_number, status)
-        time.sleep(1)
+        time.sleep(30)
 
     print("\nImport complete.")
     print("Summary:")
