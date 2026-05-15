@@ -44,11 +44,11 @@ def save_summary(repo_name: str, pr_number: int, summary_data: dict):
     db = get_db()
     project_id = repo_to_project_id(repo_name)
 
-    # New Hierarchical Path: myna_ai_info -> {owner__repo} -> prs -> {doc_id}
+    # New Hierarchical Path: myna_ai_info -> Writer -> prs -> {doc_id}
     doc_id = f"{project_id}_pr_{pr_number}"
     doc_ref = (
         db.collection("myna_ai_info")
-        .document(project_id)
+        .document("Writer")
         .collection("prs")
         .document(doc_id)
     )
@@ -93,7 +93,7 @@ def summary_exists(repo_name: str, pr_number: int) -> bool:
     doc_id = f"{project_id}_pr_{pr_number}"
     doc_ref = (
         db.collection("myna_ai_info")
-        .document(project_id)
+        .document("Writer")
         .collection("prs")
         .document(doc_id)
     )
@@ -116,7 +116,7 @@ def get_developer_profile(repo_name: str, github_handle: str):
     project_id = repo_to_project_id(repo_name)
     doc_ref = (
         db.collection("myna_ai_info")
-        .document(project_id)
+        .document("Writer")
         .collection("developers")
         .document(github_handle)
     )
@@ -158,7 +158,7 @@ def update_developer_profile(repo_name: str, github_handle: str, profile_data: d
     project_id = repo_to_project_id(repo_name)
     doc_ref = (
         db.collection("myna_ai_info")
-        .document(project_id)
+        .document("Writer")
         .collection("developers")
         .document(github_handle)
     )
